@@ -3,7 +3,6 @@ import { makeCircuit, points, tangents, roadHalf, startIndex, finishLineIndex } 
 import { makeKart } from './kart.js'
 import { makeRaceEffects } from './effects.js'
 
-export const totalLaps = 2
 export const boostSlotCount = 2
 const drivingKeys = {
   ArrowUp: 'ArrowUp', ArrowDown: 'ArrowDown', ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight',
@@ -35,7 +34,7 @@ export function trackOutline(trackPoints = points) {
 const angleOf = (direction) => Math.atan2(-direction.x, -direction.z)
 const damp = (rate, dt) => 1 - Math.exp(-rate * dt)
 
-export function createRace(container, driver, kartProfile, renderHud) {
+export function createRace(container, driver, kartProfile, totalLaps, renderHud) {
   const renderer = new T.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.6))
   renderer.shadowMap.enabled = true
@@ -59,6 +58,7 @@ export function createRace(container, driver, kartProfile, renderHud) {
   const kart = makeKart(scene, kartProfile, driver)
   const effects = makeRaceEffects(scene, kart.group)
   const keys = new Map()
+  const steeringKeys = new Map()
   const pos = new T.Vector3()
   const direction = new T.Vector3()
   const desiredCamera = new T.Vector3()
@@ -149,7 +149,8 @@ export function createRace(container, driver, kartProfile, renderHud) {
   function step(dt, frameTime = dt) {
     const throttle = keys.has('ArrowUp')
     const brake = keys.has('ArrowDown')
-    const steer = Number(keys.has('ArrowLeft')) - Number(keys.has('ArrowRight'))
+    let steer = 0
+    for (const direction of steeringKeys.values()) steer = direction
     if (countdown > 0) {
       countdown = Math.max(0, countdown - frameTime)
       if (countdown > 0) return
@@ -200,10 +201,11 @@ export function createRace(container, driver, kartProfile, renderHud) {
     const turnRate = Math.sign(velocity) * Math.min(1, Math.abs(velocity) / 3) * (1.92 - Math.min(30, Math.abs(velocity)) * .029)
     const driftStrength = T.MathUtils.smoothstep(driftTime, 0, .85)
     const driftTurn = T.MathUtils.lerp(.49, .88, driftStrength)
-    const steering = drifting ? driftDirection * driftTurn + steer * .69 : steer
+    const counterSteering = drifting && steer === -driftDirection
+    const steering = drifting ? driftDirection * driftTurn + steer * (counterSteering ? 1.45 : .69) : steer
     heading += steering * turnRate * dt
-    const slipTarget = heading - driftDirection * T.MathUtils.lerp(.12, .43, driftStrength)
-    travelHeading = T.MathUtils.lerp(travelHeading, slipTarget, damp(drifting ? 3.8 : 15, dt))
+    const slipTarget = heading - driftDirection * (counterSteering ? .04 : T.MathUtils.lerp(.12, .43, driftStrength))
+    travelHeading = T.MathUtils.lerp(travelHeading, slipTarget, damp(drifting && !counterSteering ? 3.8 : 15, dt))
     direction.set(-Math.sin(travelHeading), 0, -Math.cos(travelHeading))
     pos.addScaledVector(direction, velocity * dt)
 
@@ -283,6 +285,7 @@ export function createRace(container, driver, kartProfile, renderHud) {
   function setKey(key, pressed, source = key) {
     const sources = keys.get(key)
     if (!active || !pressed) {
+      steeringKeys.delete(source)
       if (sources?.delete(source) && sources.size === 0) {
         keys.delete(key)
         if (key === 'ArrowUp' && (quickWindow > 0 || (driftTime >= minDriftTime && !keys.has('Shift')))) {
@@ -290,6 +293,9 @@ export function createRace(container, driver, kartProfile, renderHud) {
         }
       }
       return
+    }
+    if ((key === 'ArrowLeft' || key === 'ArrowRight') && !steeringKeys.has(source)) {
+      steeringKeys.set(source, key === 'ArrowLeft' ? 1 : -1)
     }
     if (sources) {
       sources.add(source)
@@ -312,11 +318,12 @@ export function createRace(container, driver, kartProfile, renderHud) {
     if (key) {
       event.preventDefault()
       if (!event.repeat) setKey(key, true, event.code)
-    } else if (event.code === 'KeyR' && !event.ctrlKey && !event.repeat) reset()
+    }
   })
 
   function clearKeys() {
     keys.clear()
+    steeringKeys.clear()
     boostRequested = launchRequested = quickRequested = quickReleased = false
   }
 
@@ -330,5 +337,5 @@ export function createRace(container, driver, kartProfile, renderHud) {
   reset()
   resize()
   renderer.setAnimationLoop(animate)
-  return { reset, setKey, setActive(value) { active = value; clearKeys() } }
+  return { reset, setKey, setActive(value) { active = value; lastFrame = undefined; clearKeys() } }
 }

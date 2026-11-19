@@ -1,9 +1,9 @@
 export const circuits = [
-  { id: 'coast', name: '선셋 코스트', english: 'SUNSET COAST', description: '야자수가 늘어선 노을빛 해안 도로', color: '#35dfef',
+  { id: 'coast', laps: 1, name: '선셋 코스트', english: 'SUNSET COAST', description: '야자수가 늘어선 노을빛 해안 도로', color: '#35dfef',
     nodes: [[0,56],[0,-12],[10,-71],[36,-114],[89,-126],[133,-92],[143,-47],[120,-18],[98,5],[120,39],[120,79],[81,112],[28,116],[3,100]] },
-  { id: 'mesa', name: '레드 메사', english: 'RED MESA', description: '붉은 협곡과 넓은 헤어핀', color: '#ff9a5e',
+  { id: 'mesa', laps: 2, name: '레드 메사', english: 'RED MESA', description: '붉은 협곡과 넓은 헤어핀', color: '#ff9a5e',
     nodes: [[-17,71],[-20,1],[-35,-56],[-25,-105],[22,-131],[77,-108],[109,-71],[164,-60],[166,-5],[128,38],[105,95],[43,121],[4,112]] },
-  { id: 'alpine', name: '알파인 패스', english: 'ALPINE PASS', description: '설산 사이를 잇는 연속 코너', color: '#98c5ff',
+  { id: 'alpine', laps: 1, name: '알파인 패스', english: 'ALPINE PASS', description: '설산 사이를 잇는 연속 코너', color: '#98c5ff',
     nodes: [[5,75],[5,6],[37,-42],[71,-62],[59,-109],[95,-141],[148,-118],[155,-69],[118,-23],[151,25],[128,77],[95,66],[68,111],[25,121]] },
 ]
 
