@@ -28,7 +28,7 @@ nav { display: flex; align-self: stretch; gap: 12px; }
 .nav-tab:hover, .nav-tab.active { color: var(--cyan); }
 .nav-tab.active { border-bottom-color: var(--cyan); background: linear-gradient(0deg, #2ce1ec12, transparent 65%); }
 .mode { margin-left: auto; display: flex; gap: 8px; align-items: center; color: #c5cfe0; white-space: nowrap; font-size: 12px; font-weight: 600; border: 1px solid #2a3848; border-radius: 30px; padding: 7px 12px; }
-.mode i, .ready-dot { width: 7px; height: 7px; border-radius: 50%; background: #63eac2; box-shadow: 0 0 9px #63eac269; flex: none; }
+.mode i { width: 7px; height: 7px; border-radius: 50%; background: #63eac2; box-shadow: 0 0 9px #63eac269; flex: none; }
 .shell { padding-top: 36px; }
 .page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 26px; }
 .eyebrow { display: flex; align-items: center; gap: 9px; color: var(--cyan); margin: 0 0 8px; font: 700 15px/1 var(--display); letter-spacing: .2em; }
@@ -53,11 +53,9 @@ h1 em { font-style: normal; color: var(--cyan); }
 .stat.time { min-width: 119px; }
 .fullscreen { position: absolute; top: 18px; right: 19px; display: grid; place-items: center; width: 39px; height: 39px; background: #091422cd; border: 1px solid #9bdaf94a; border-radius: 7px; color: #fff; }
 .fullscreen:hover { color: var(--cyan); }
-.race-start, .notice { position: absolute; left: 50%; transform: translateX(-50%); background: #0b1526ed; border: 1px solid #7ca5bb70; box-shadow: 0 5px 24px #04132344; border-radius: 8px; color: white; }
-.race-start { display: flex; gap: 9px; align-items: center; bottom: 20px; padding: 8px 13px; white-space: nowrap; font-size: 13px; font-weight: 700; }
+.notice { position: absolute; left: 50%; transform: translateX(-50%); background: #0b1526ed; border: 1px solid #7ca5bb70; box-shadow: 0 5px 24px #04132344; border-radius: 8px; color: white; }
 .notice { top: 46%; width: max-content; max-width: 85%; padding: 14px 20px; text-align: center; font-size: 15px; }
 kbd { display: inline-grid; min-width: 25px; height: 25px; place-items: center; border: 1px solid #394a61; border-bottom-width: 2px; background: #19283a; border-radius: 5px; color: #edfaff; font: 700 14px/1 system-ui; }
-.race-start kbd { margin-right: 3px; }
 .speedometer { position: absolute; right: 17px; bottom: 13px; width: 126px; aspect-ratio: 120 / 104; pointer-events: none; filter: drop-shadow(0 2px 4px #040c16); }
 .speedometer svg { width: 100%; }
 .gauge-bg, .gauge-line { fill: none; stroke-width: 5; stroke-linecap: round; }
@@ -77,12 +75,8 @@ kbd { display: inline-grid; min-width: 25px; height: 25px; place-items: center; 
 .sidebar .panel { padding: 17px 16px; }
 .panel-heading { display: flex; align-items: center; gap: 9px; }
 .panel-heading h2 { margin: 0; font-size: 14px; font-weight: 800; letter-spacing: -.025em; }
-.track-preview { display: grid; place-items: center; margin: 14px 0 12px; background-color: #0b1420; background-image: linear-gradient(#273a4e58 1px, transparent 1px), linear-gradient(90deg, #273a4e58 1px, transparent 1px), radial-gradient(ellipse, #16414a6b, transparent 75%); background-size: 16px 16px, 16px 16px, 100% 100%; border: 1px solid #223344; border-radius: 8px; height: 145px; }
+.track-preview { display: grid; place-items: center; margin: 14px 0 0; background-color: #0b1420; background-image: linear-gradient(#273a4e58 1px, transparent 1px), linear-gradient(90deg, #273a4e58 1px, transparent 1px), radial-gradient(ellipse, #16414a6b, transparent 75%); background-size: 16px 16px, 16px 16px, 100% 100%; border: 1px solid #223344; border-radius: 8px; height: 145px; }
 .track-preview svg { width: 94%; height: 100%; }
-.map-link { width: 100%; display: flex; align-items: center; gap: 7px; border: 1px solid #283c50; background: #131f2e; color: #d4e4f2; border-radius: 7px; min-height: 38px; padding: 0 9px; font-size: 12px; font-weight: 700; }
-.map-link svg:first-child { color: var(--cyan); }
-.map-link svg:last-child { margin-left: auto; color: #8193aa; }
-.map-link:hover { border-color: var(--cyan); }
 .driver { display: flex; gap: 13px; align-items: center; margin: 15px 0 16px; }
 .driver img { width: 70px; aspect-ratio: 1; object-fit: cover; border-radius: 9px; background: #123343; border: 1px solid #35596b; }
 .driver div { display: grid; gap: 3px; }
@@ -97,14 +91,6 @@ kbd { display: inline-grid; min-width: 25px; height: 25px; place-items: center; 
 .control-list > span { display: flex; align-items: center; gap: 5px; color: #c1cddd; font-size: 12px; }
 .control-list kbd:last-of-type { margin-right: 3px; }
 .footer { display: flex; justify-content: space-between; margin-top: 22px; padding: 14px 0 22px; border-top: 1px solid #222d3d; color: #8694a9; font: 700 12px/1 var(--display); letter-spacing: .14em; }
-.map-page { padding: 18px; }
-.map-form { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; padding-bottom: 15px; }
-.map-form label, .map-form a { display: flex; gap: 7px; align-items: center; color: var(--cyan); font-size: 13px; font-weight: 700; }
-.map-form a { margin-left: auto; }
-.search-group { display: flex; gap: 8px; flex: 1; }
-.search-group input { width: 100%; min-width: 100px; border: 1px solid #334358; border-radius: 7px; padding: 7px 11px; background: #0b1420; color: var(--text); font-size: 14px; }
-#googleMap { display: block; width: 100%; height: min(64vh, 620px); min-height: 305px; border: 1px solid var(--border); border-radius: 7px; background: #1b2b3d; }
-.map-caption { margin: 13px 0 0; color: var(--muted); font-size: 13px; }
 .touch-controls { display: none; }
 @media (max-width: 1040px) {
   .nav-shell, .shell { width: calc(100% - 44px); }
@@ -115,7 +101,6 @@ kbd { display: inline-grid; min-width: 25px; height: 25px; place-items: center; 
   .sidebar { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 }
 @media (pointer: coarse) {
-  .race-start { display: none; }
   .touch-controls { position: absolute; inset: auto 10px 10px; display: flex; justify-content: space-between; pointer-events: none; }
   .touch-controls button { touch-action: none; pointer-events: auto; width: 44px; height: 42px; margin: 0 2px; border-radius: 8px; color: white; border: 1px solid #8bcbd25c; background: #0b1526df; }
   .speedometer { bottom: 52px; right: 8px; width: 85px; }
@@ -204,7 +189,6 @@ kbd { display: inline-grid; min-width: 25px; height: 25px; place-items: center; 
 .lobby-actions i { width: 4px; height: 4px; border-radius: 50%; background: var(--cyan); }
 .start-button { display: inline-flex; align-items: center; gap: 10px; min-height: 45px; padding: 0 17px; background: var(--cyan); color: #081622; border: 0; border-radius: 7px; font-weight: 900; font-size: 14px; }
 .start-button:hover { background: #a1f9ff; }
-.stage.wall-hit .stage-edge { box-shadow: inset 0 0 36px #ff704a8c; }
 @media (max-width: 980px) {
   .driver-choice, .kart-choice { grid-template-columns: 1fr; justify-items: start; }
 }
@@ -224,3 +208,13 @@ kbd { display: inline-grid; min-width: 25px; height: 25px; place-items: center; 
   .driver-choice, .kart-choice { grid-template-columns: 1fr; }
   .driver-choice .choice-caption, .kart-choice .choice-caption { padding: 6px 0 1px; }
 }
+
+.race-countdown { position: absolute; inset: 34% 0 auto; display: grid; justify-items: center; gap: 9px; pointer-events: none; }
+#countdownNumber { color: white; font: italic 900 clamp(68px, 12vw, 150px)/.8 var(--display); letter-spacing: -.04em; text-shadow: 0 3px 10px #091525, 0 0 26px #07192a; }
+.launch-ready #countdownNumber { color: #65f4ff; }
+.countdown-hint { padding: 6px 12px; border-radius: 20px; border: 1px solid #9bdaf94a; background: #091422de; color: #f3f8ff; font-size: 12px; font-weight: 700; }
+.countdown-hint:empty { display: none; }
+.wrong-way { position: absolute; z-index: 2; inset: 24% auto auto 50%; transform: translateX(-50%); display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 1px 9px; padding: 7px 14px; border: 1px solid #ff9973; border-radius: 7px; background: #331913f0; color: #ffbb9d; white-space: nowrap; pointer-events: none; }
+.wrong-way > span { grid-row: span 2; font-size: 24px; line-height: 1; }
+.wrong-way strong { color: #fff0e7; font-size: 17px; }
+.wrong-way small { font-size: 11px; }

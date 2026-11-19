@@ -4,7 +4,15 @@ import { makeKart } from './kart.js'
 import { makeRaceEffects } from './effects.js'
 
 const totalLaps = 3
-const drivingKeys = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Shift', 'Control'])
+const drivingKeys = {
+  ArrowUp: 'ArrowUp', ArrowDown: 'ArrowDown', ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight',
+  KeyW: 'ArrowUp', KeyS: 'ArrowDown', KeyA: 'ArrowLeft', KeyD: 'ArrowRight',
+  ShiftLeft: 'Shift', ShiftRight: 'Shift', ControlLeft: 'Control', ControlRight: 'Control',
+}
+const countdownDuration = 3
+const earlyLaunchWindow = .65
+const lateLaunchWindow = .25
+const launchBoostDuration = .95
 const topSpeed = 42
 const boostSpeed = 53
 const reverseSpeed = 17
@@ -46,24 +54,32 @@ export function createRace(container, driver, kartProfile, renderHud) {
   makeCircuit(scene, () => renderer.render(scene, camera))
   const kart = makeKart(scene, kartProfile, driver)
   const effects = makeRaceEffects(scene, kart.group)
-  const keys = new Set()
+  const keys = new Map()
   const pos = new T.Vector3()
   const direction = new T.Vector3()
-  const wallNormal = new T.Vector3()
   const desiredCamera = new T.Vector3()
   const desiredLook = new T.Vector3()
   const look = new T.Vector3()
   const sunOffset = new T.Vector3(-48, 38, -34)
-  let heading, velocity, index, progress, elapsed, lapTime, nextCrossing, lap, started, finished
-  let travelHeading, driftDirection, drifting, charge, boostRemaining, boostRequested, impact
+  let heading, velocity, index, progress, elapsed, lapTime, nextCrossing, lap, finished
+  let travelHeading, driftDirection, drifting, charge, boostRemaining, boostRequested, boostLength
+  let countdown, launchWindow, launchRequested, wrongWayTime
   let best = 0
   let active = true
-  let lastFrame = performance.now()
+  let lastFrame
   let hudAt = 0
   let renderUntil = 0
 
   function showHud() {
-    renderHud({ index, lap, time: elapsed, best, speed: Math.round(Math.abs(velocity) * speedScale), started, finished, drifting, charge, boost: boostRemaining / boostDuration, impact })
+    renderHud({
+      index, lap, time: elapsed, best, speed: Math.round(Math.abs(velocity) * speedScale), finished, drifting, charge,
+      boost: boostRemaining / boostLength,
+      launchBoost: boostRemaining > 0 && boostLength === launchBoostDuration,
+      countdown: Math.ceil(countdown),
+      launchReady: countdown > 0 && countdown <= earlyLaunchWindow,
+      showGo: countdown === 0 && elapsed < .65,
+      wrongWay: wrongWayTime >= .65,
+    })
   }
 
   function updateView(dt) {
@@ -84,18 +100,20 @@ export function createRace(container, driver, kartProfile, renderHud) {
   }
 
   function reset() {
-    keys.clear()
+    clearKeys()
     pos.copy(points[startIndex])
     index = startIndex
     heading = travelHeading = angleOf(tangents[index])
-    charge = boostRemaining = driftDirection = impact = 0
-    drifting = boostRequested = false
+    charge = boostRemaining = driftDirection = wrongWayTime = launchWindow = 0
+    boostLength = boostDuration
+    countdown = countdownDuration
+    drifting = false
     effects.reset()
     elapsed = progress = velocity = 0
     lapTime = null
     nextCrossing = finishLineIndex
     lap = 1
-    started = finished = false
+    finished = false
     for (const wheel of kart.wheels) {
       wheel.hub.rotation.x = 0
       wheel.pivot.rotation.y = 0
@@ -103,6 +121,7 @@ export function createRace(container, driver, kartProfile, renderHud) {
     updateView(Infinity)
     showHud()
     renderer.render(scene, camera)
+    lastFrame = undefined
   }
 
   function nearestPoint() {
@@ -119,23 +138,34 @@ export function createRace(container, driver, kartProfile, renderHud) {
     return nearest
   }
 
-  function step(dt) {
+  function step(dt, frameTime = dt) {
     const throttle = keys.has('ArrowUp')
     const brake = keys.has('ArrowDown')
     const steer = Number(keys.has('ArrowLeft')) - Number(keys.has('ArrowRight'))
-    if (throttle || brake) started = true
-    if (started) elapsed += dt
+    if (countdown > 0) {
+      countdown = Math.max(0, countdown - frameTime)
+      if (countdown > 0) return
+      launchWindow = lateLaunchWindow
+    }
+    elapsed += dt
     boostRemaining = Math.max(0, boostRemaining - dt)
-    impact = Math.max(0, impact - dt)
+    if (launchRequested && launchWindow > 0 && throttle && !brake) {
+      boostRemaining = boostLength = launchBoostDuration
+      launchWindow = 0
+      velocity = Math.max(velocity, 7)
+    } else {
+      launchWindow = Math.max(0, launchWindow - dt)
+    }
+    launchRequested = false
     if (boostRequested && charge >= 1 && velocity > 0 && !brake && boostRemaining === 0) {
-      boostRemaining = boostDuration
+      boostRemaining = boostLength = boostDuration
       charge = 0
     }
     boostRequested = false
     if (brake) boostRemaining = 0
     const boosting = boostRemaining > 0
 
-    if (!keys.has('Shift') || velocity < driftMinSpeed || brake || impact > .12) driftDirection = 0
+    if (!keys.has('Shift') || velocity < driftMinSpeed || brake) driftDirection = 0
     else if (steer && !driftDirection) driftDirection = steer
     drifting = driftDirection !== 0
 
@@ -151,7 +181,7 @@ export function createRace(container, driver, kartProfile, renderHud) {
     const steering = drifting ? driftDirection * .72 + steer * .69 : steer
     heading += steering * turnRate * dt
     const slipTarget = heading - driftDirection * .22
-    travelHeading = T.MathUtils.lerp(travelHeading, slipTarget, damp(impact > 0 ? 4 : drifting ? 3.8 : 15, dt))
+    travelHeading = T.MathUtils.lerp(travelHeading, slipTarget, damp(drifting ? 3.8 : 15, dt))
     direction.set(-Math.sin(travelHeading), 0, -Math.cos(travelHeading))
     pos.addScaledVector(direction, velocity * dt)
 
@@ -162,27 +192,18 @@ export function createRace(container, driver, kartProfile, renderHud) {
     const limit = roadHalf - .20
     if (Math.abs(lateral) > limit) {
       const side = Math.sign(lateral)
-      const push = lateral - side * (limit - .22)
+      const push = lateral - side * limit
       pos.x += tangent.z * push
       pos.z -= tangent.x * push
-      wallNormal.set(-tangent.z * side, 0, tangent.x * side)
-      const directionSign = Math.sign(velocity)
-      const outgoing = direction.multiplyScalar(directionSign)
-      const outward = outgoing.dot(wallNormal)
-      if (outward > 0) {
-        outgoing.addScaledVector(wallNormal, -1.48 * outward - .20).normalize().multiplyScalar(directionSign)
-        const reflectedHeading = angleOf(outgoing)
-        const turn = Math.atan2(Math.sin(reflectedHeading - travelHeading), Math.cos(reflectedHeading - travelHeading))
-        travelHeading += turn
-        heading = travelHeading
-        velocity *= .70
-        impact = .22
-        drifting = false
-        driftDirection = 0
-      }
+      const outward = side * Math.sign(velocity) * (-direction.x * tangent.z + direction.z * tangent.x)
+      velocity *= Math.exp(-Math.max(0, outward) * 7 * dt)
     } else if (drifting) {
       charge = Math.min(1, charge + Math.min(.94, velocity * .046) * dt)
     }
+
+    const forwardSpeed = direction.dot(tangent) * velocity
+    if (forwardSpeed < -2.5) wrongWayTime = Math.min(1, wrongWayTime + dt)
+    else wrongWayTime = Math.max(0, wrongWayTime - dt * 1.8)
 
     const length = points.length
     progress += ((next - index + length * 1.5) % length) - length / 2
@@ -196,6 +217,7 @@ export function createRace(container, driver, kartProfile, renderHud) {
           finished = true
           velocity = boostRemaining = 0
           drifting = false
+          wrongWayTime = 0
         } else lap++
       }
       lapTime = elapsed
@@ -216,11 +238,12 @@ export function createRace(container, driver, kartProfile, renderHud) {
   }
 
   function animate(now) {
-    const dt = T.MathUtils.clamp((now - lastFrame) / 1000, 0, .05)
+    const frameTime = T.MathUtils.clamp((now - (lastFrame ?? now)) / 1000, 0, .15)
+    const dt = Math.min(frameTime, .05)
     lastFrame = now
     if (!active || document.hidden) return
     if (velocity || keys.size) renderUntil = now + 800
-    if (!finished) step(dt)
+    if (!finished) step(dt, frameTime)
     if (now < renderUntil) {
       updateView(dt)
       renderer.render(scene, camera)
@@ -231,29 +254,42 @@ export function createRace(container, driver, kartProfile, renderHud) {
     }
   }
 
-  function setKey(key, pressed) {
+  function setKey(key, pressed, source = key) {
+    const sources = keys.get(key)
     if (!active || !pressed) {
-      keys.delete(key)
+      sources?.delete(source)
+      if (!sources?.size) keys.delete(key)
       return
     }
-    if (key === 'Control' && !keys.has(key)) boostRequested = true
-    keys.add(key)
+    if (sources) {
+      sources.add(source)
+      return
+    }
+    if (key === 'Control' && countdown === 0) boostRequested = true
+    if (key === 'ArrowUp' && (countdown > 0 ? countdown <= earlyLaunchWindow : launchWindow > 0)) {
+      launchRequested = true
+    }
+    keys.set(key, new Set([source]))
   }
 
   window.addEventListener('keydown', (event) => {
     if (!active || event.altKey || event.metaKey || event.target.closest?.('input, textarea, [contenteditable]')) return
-    const key = event.key
-    if (drivingKeys.has(key)) {
+    const key = drivingKeys[event.code]
+    if (key) {
       event.preventDefault()
-      setKey(key, true)
+      if (!event.repeat) setKey(key, true, event.code)
     } else if (event.code === 'KeyR' && !event.ctrlKey && !event.repeat) reset()
   })
+
   function clearKeys() {
     keys.clear()
-    boostRequested = false
+    boostRequested = launchRequested = false
   }
 
-  window.addEventListener('keyup', (event) => setKey(event.key, false))
+  window.addEventListener('keyup', (event) => {
+    const key = drivingKeys[event.code]
+    if (key) setKey(key, false, event.code)
+  })
   window.addEventListener('blur', clearKeys)
   document.addEventListener('visibilitychange', clearKeys)
   new ResizeObserver(resize).observe(container)
