@@ -237,7 +237,8 @@ kbd { display: inline-grid; min-width: 25px; height: 25px; place-items: center; 
 .home-mode strong { flex: 1; font-size: 17px; white-space: nowrap; }
 .home-mode small { font-size: 11px; white-space: nowrap; }
 .home-mode:disabled { cursor: default; color: #a5b2c2; }
-.home-room { position: absolute; bottom: 7%; left: 50%; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 22px; background: #131f2be8; color: #eaf4ff; border: 1px solid #586b82; border-radius: 7px; white-space: nowrap; }
+.home-utilities { position: absolute; bottom: 7%; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; }
+.home-room { display: inline-flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 22px; background: #131f2be8; color: #eaf4ff; border: 1px solid #586b82; border-radius: 7px; white-space: nowrap; }
 .home-room:hover { border-color: var(--cyan); }
 .home-room svg { color: var(--cyan); }
 .record-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 16px; margin-bottom: 16px; }
@@ -271,4 +272,26 @@ kbd { display: inline-grid; min-width: 25px; height: 25px; place-items: center; 
 }
 @media (max-width: 520px) {
   .pause-button { top: 10px; right: 50px; min-height: 34px; padding: 4px 6px; }
+}
+
+.coin-balance { display: flex; align-items: center; gap: 7px; margin-left: auto; min-height: 35px; padding: 0 11px; color: #ffe38b; border: 1px solid #705a34; border-radius: 7px; background: #211d21; white-space: nowrap; }
+.coin-balance strong { font: 700 19px/1 var(--display); font-variant-numeric: tabular-nums; }
+.coin-balance > span { color: #e6d4a7; font-size: 11px; }
+.garage-workshop { display: grid; gap: 16px; }
+.upgrade-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.upgrade-panel { padding: 19px; }
+.upgrade-panel h2 { margin: 0 0 9px; font-size: 16px; }
+.upgrade-speed { color: var(--muted); font: 700 13px/1 var(--display); letter-spacing: .1em; }
+.upgrade-speed strong { color: var(--cyan); font: italic 800 48px/.95 var(--display); }
+.upgrade-level { display: flex; align-items: center; gap: 10px; margin: 15px 0; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.upgrade-level progress { flex: 1; width: 100%; min-width: 30px; accent-color: var(--cyan); }
+.upgrade-button:disabled { color: var(--muted); cursor: default; border-color: var(--border); }
+.upgrade-feedback { color: #ffd873; font-size: 13px; margin: 0; }
+.upgrade-feedback:empty { display: none; }
+@media (max-width: 520px) {
+  .coin-balance { gap: 4px; padding-inline: 7px; }
+  .coin-balance > span { display: none; }
+  .home-room { padding-inline: 12px; gap: 7px; }
+  .upgrade-grid { grid-template-columns: 1fr; }
+  .utility-link { gap: 4px; padding-inline: 8px; white-space: nowrap; }
 }

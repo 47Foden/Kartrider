@@ -5,6 +5,7 @@ import './style.css'
 import { boostSlotCount, createRace, trackOutline } from './race.js'
 import { configureCircuit, makeTrack } from './circuit.js'
 import { circuits, drivers, karts, selectProfile } from './garage.js'
+import { finishReward, kartPerformance, maxUpgrade, speedSettings, startingCoins, upgradeCost } from './economy.js'
 
 const iconPaths = {
   bolt: '<path d="M13 2 4 14h7l-1 8 10-12h-7l1-8z"/>',
@@ -13,6 +14,8 @@ const iconPaths = {
   expand: '<path d="M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5"/>',
   pause: '<path d="M9 5v14m6-14v14" stroke-width="3"/>',
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  coin: '<circle cx="12" cy="12" r="9"/><path d="M12 7v10m2.5-8.5h-3.8a1.8 1.8 0 0 0 0 3.5h2.6a1.8 1.8 0 0 1 0 3.5H9.5"/>',
+  wrench: '<path d="M15 7a4 4 0 0 0-5-5l2 2-3 3-2-2a4 4 0 0 0 4 5l-7 7a2 2 0 0 0 3 3l7-7a4 4 0 0 0 5-4l-2 2-3-3 2-2Z"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   keyboard: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M18 13h.01M9 15h6"/>',
   chevron: '<path d="m9 18 6-6-6-6"/>',
@@ -28,11 +31,22 @@ function readLocal(key, fallback) {
 function writeLocal(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)) } catch {}
 }
+const walletKey = 'apex-economy'
+let wallet = readLocal(walletKey, { coins: startingCoins, upgrades: {} })
+function refreshWallet() {
+  wallet = readLocal(walletKey, wallet)
+  return wallet
+}
+function saveWallet() {
+  writeLocal(walletKey, wallet)
+  updateCoins()
+}
 const [savedCircuit, savedDriver, savedKart] = selectProfile(new URLSearchParams(readLocal('apex-garage', {})))
 const selected = { track: savedCircuit.id, driver: savedDriver.id, kart: savedKart.id }
 const raceParams = new URLSearchParams(selected)
 for (const [key, value] of new URLSearchParams(location.search)) raceParams.set(key, value)
 const [circuit, driver, kart] = selectProfile(raceParams)
+let garageKart = selected.kart
 const asset = (file) => import.meta.env.BASE_URL + file
 const toPath = (coordinates) => coordinates.map(([x, y], index) => `${index ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ') + ' Z'
 const circuitCards = circuits.map((entry) => {
@@ -53,7 +67,7 @@ document.querySelector('#app').innerHTML = `
       <nav aria-label="메인 메뉴">
         <button class="nav-tab active" id="homeTab" type="button">${icon('flag')}<span>홈</span></button>
       </nav>
-
+      <span class="coin-balance" aria-label="보유 코인">${icon('coin', 19)} <strong id="coins"></strong><span>코인</span></span>
     </div>
   </header>
   <main class="shell">
@@ -74,11 +88,14 @@ document.querySelector('#app').innerHTML = `
         <a href="#single" class="home-mode primary">${icon('flag', 23)} <strong>싱글 플레이</strong> ${icon('chevron')}</a>
         <button type="button" class="home-mode" disabled>${icon('lock', 22)} <strong>멀티 플레이</strong><small>준비 중</small></button>
       </div>
-      <a href="#room" class="home-room">${icon('car', 23)} <strong>마이룸</strong> ${icon('chevron', 16)}</a>
+      <div class="home-utilities">
+        <a href="#room" class="home-room">${icon('car', 23)} <strong>마이룸</strong> ${icon('chevron', 16)}</a>
+        <a href="#garage" class="home-room">${icon('wrench', 20)} <strong>차고</strong> ${icon('chevron', 16)}</a>
+      </div>
     </section>
     <section id="singlePage" class="lobby" hidden>
       <div class="choices route-choices" role="group" aria-label="서킷 선택">${circuitCards}</div>
-      <div class="lobby-actions"><a href="#home" class="outline-button">뒤로</a><a href="#records" class="start-button">확인 ${icon('chevron', 18)}</a></div>
+      <div class="lobby-actions"><a href="#home" class="outline-button">뒤로</a><a href="#single-room" class="outline-button utility-link">${icon('car', 17)} 마이룸</a><a href="#records" class="start-button">확인 ${icon('chevron', 18)}</a></div>
     </section>
     <section id="roomPage" class="lobby" hidden>
       <div class="garage-grid">
@@ -91,7 +108,17 @@ document.querySelector('#app').innerHTML = `
           <div class="choices kart-choices" role="group" aria-label="카트 선택">${kartCards}</div>
         </section>
       </div>
-      <div class="lobby-actions"><a href="#home" class="start-button">완료 ${icon('chevron', 18)}</a></div>
+      <div class="lobby-actions"><a href="#home" id="roomDone" class="start-button">완료 ${icon('chevron', 18)}</a></div>
+    </section>
+    <section id="garagePage" class="garage-workshop" hidden>
+      <div class="choices kart-choices" id="workshopChoices" role="group" aria-label="강화할 카트">
+        ${karts.map((entry) => `<button class="choice kart-choice" type="button" data-workshop-kart="${entry.id}" aria-pressed="false" style="--choice:${entry.color}">
+          <img src="${asset('kart-' + entry.id + '.webp')}" alt=""><div class="choice-caption"><span>${entry.english}</span><strong>${entry.name}</strong></div>
+        </button>`).join('')}
+      </div>
+      <div class="upgrade-grid" id="upgradeStats"></div>
+      <p class="upgrade-feedback" id="upgradeFeedback" role="status"></p>
+      <div class="lobby-actions"><a href="#home" class="outline-button">뒤로</a></div>
     </section>
     <section id="recordsPage" hidden>
       <div class="record-grid">
@@ -102,7 +129,7 @@ document.querySelector('#app').innerHTML = `
         </section>
         <section class="panel record-map" id="recordMap"></section>
       </div>
-      <div class="lobby-actions"><a href="#single" class="outline-button">맵 다시 선택</a>
+      <div class="lobby-actions"><a href="#single" class="outline-button">맵 다시 선택</a><a href="#records-room" class="outline-button utility-link">${icon('car', 17)} 마이룸</a>
         <button type="button" id="startRace" class="start-button">${icon('flag', 20)} 레이스 시작 ${icon('chevron', 18)}</button>
       </div>
     </section>
@@ -184,6 +211,55 @@ document.querySelector('#app').innerHTML = `
 `
 
 const byId = (id) => document.getElementById(id)
+function updateCoins() {
+  byId('coins').textContent = wallet.coins.toLocaleString('ko-KR')
+}
+function showGarage(focusKind) {
+  refreshWallet()
+  const stats = kartPerformance(wallet, garageKart)
+  for (const option of document.querySelectorAll('[data-workshop-kart]')) {
+    option.setAttribute('aria-pressed', String(option.dataset.workshopKart === garageKart))
+  }
+  byId('upgradeStats').innerHTML = Object.entries(stats).map(([kind, stat]) => {
+    const maxed = stat.level >= maxUpgrade
+    const disabled = maxed || wallet.coins < upgradeCost
+    return `<section class="panel upgrade-panel">
+      <h2>${speedSettings[kind].label}</h2>
+      <div class="upgrade-speed"><strong>${stat.speed}</strong> KM/H</div>
+      <div class="upgrade-level"><progress value="${stat.level}" max="${maxUpgrade}" aria-label="${speedSettings[kind].label} 강화 단계"></progress><span>Lv. ${stat.level} / ${maxUpgrade}</span></div>
+      <button class="outline-button upgrade-button" type="button" data-upgrade="${kind}" ${disabled ? 'disabled' : ''}>
+        ${maxed ? '최대 단계' : wallet.coins < upgradeCost ? '코인 부족' : `강화 · ${upgradeCost} 코인`}
+      </button>
+    </section>`
+  }).join('')
+  if (focusKind) document.querySelector(`[data-upgrade="${focusKind}"]:enabled`)?.focus()
+}
+byId('workshopChoices').onclick = (event) => {
+  const button = event.target.closest('[data-workshop-kart]')
+  if (!button) return
+  garageKart = button.dataset.workshopKart
+  byId('upgradeFeedback').textContent = ''
+  showGarage()
+}
+byId('upgradeStats').onclick = (event) => {
+  const button = event.target.closest('[data-upgrade]')
+  if (!button || button.disabled) return
+  const kind = button.dataset.upgrade
+  refreshWallet()
+  const stat = kartPerformance(wallet, garageKart)[kind]
+  if (stat.level >= maxUpgrade || wallet.coins < upgradeCost) {
+    showGarage()
+    return
+  }
+  wallet.upgrades[garageKart] ??= {}
+  wallet.upgrades[garageKart][kind] = stat.level + 1
+  wallet.coins -= upgradeCost
+  saveWallet()
+  byId('upgradeFeedback').textContent = `${speedSettings[kind].label} Lv. ${stat.level + 1} · ${stat.speed + speedSettings[kind].increase} km/h`
+  showGarage(kind)
+}
+updateCoins()
+
 const stage = byId('stage')
 const notice = byId('notice')
 const boostSlots = byId('boostSlots')
@@ -219,12 +295,12 @@ function initRace() {
   byId('trackPath').setAttribute('stroke', circuit.color)
   byId('trackShadow').setAttribute('d', path)
   try {
-    race = createRace(byId('viewport'), driver, kart, circuit.laps, (state) => {
+    race = createRace(byId('viewport'), driver, kart, circuit.laps, () => kartPerformance(refreshWallet(), kart.id), (state) => {
       byId('lap').firstChild.textContent = state.lap
       byId('time').textContent = formatTime(state.time)
       byId('best').textContent = state.best ? formatTime(state.best) : '--:--.---'
       byId('speed').textContent = String(state.speed).padStart(3, '0')
-      byId('speedArc').style.strokeDasharray = `${Math.max(2, state.speed / 3)} 100`
+      byId('speedArc').style.strokeDasharray = `${Math.max(2, Math.min(100, 100 * state.speed / state.speedCap))} 100`
       const boostState = state.boost ? 'active' : state.boostSlots > 0 ? 'ready' : state.drifting ? 'drift' : 'charge'
       byId('boostHud').dataset.state = boostState
       byId('boostMeter').value = state.boostSlots === boostSlotCount ? 100 : Math.round(state.charge * 100)
@@ -246,9 +322,12 @@ function initRace() {
       byId('wrongWay').hidden = !state.wrongWay
       notice.hidden = !state.finished
       if (state.finished) {
-        notice.textContent = `완주!  ${formatTime(state.time)}`
+        notice.textContent = `완주!  ${formatTime(state.time)} · +${finishReward} 코인`
         if (!recorded) {
           writeLocal(recordKey(circuit), [...recordsFor(circuit), state.time].sort((a, b) => a - b).slice(0, 5))
+          refreshWallet()
+          wallet.coins += finishReward
+          saveWallet()
           recorded = true
         }
       }
@@ -263,13 +342,24 @@ function initRace() {
 const pageInfo = {
   single: ['서킷 <em>선택</em>', '타임어택에 도전할 서킷을 고르세요.'],
   room: ['마이<em>룸</em>', '출전할 캐릭터와 카트바디를 고르세요.'],
+  garage: ['카트 <em>차고</em>', '카트별 기본 속도와 부스터 속도를 강화하세요.'],
   records: ['타임<em>어택</em>', '선택한 서킷의 완주 기록입니다.'],
   race: [`${circuit.name} <em>서킷</em>`, circuit.description],
 }
 const pages = ['home', ...Object.keys(pageInfo)]
 function syncPage() {
   const requested = location.hash.slice(1)
-  const page = pages.includes(requested) ? requested : 'home'
+  const roomReturns = { 'single-room': '#single', 'records-room': '#records' }
+  const roomReturn = roomReturns[requested]
+  const page = roomReturn ? 'room' : pages.includes(requested) ? requested : 'home'
+  if (page === 'room') byId('roomDone').href = roomReturn ?? '#home'
+  refreshWallet()
+  updateCoins()
+  if (page === 'garage') {
+    garageKart = selected.kart
+    byId('upgradeFeedback').textContent = ''
+    showGarage()
+  }
   for (const name of pages) byId(`${name}Page`).hidden = name !== page
   byId('pageHeading').hidden = page === 'home'
   byId('homeTab').setAttribute('aria-current', page === 'home' ? 'page' : 'false')
@@ -340,7 +430,10 @@ byId('restart').onclick = () => {
 byId('leave').onclick = () => {
   pauseDialog.close()
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
-  location.hash = '#home'
+  selected.track = circuit.id
+  writeLocal('apex-garage', selected)
+  syncChoices()
+  location.hash = '#records'
 }
 pauseDialog.addEventListener('cancel', (event) => {
   event.preventDefault()

@@ -13,10 +13,8 @@ const countdownDuration = 3
 const earlyLaunchWindow = .65
 const lateLaunchWindow = .25
 const launchBoostDuration = .95
-const topSpeed = 42
-const boostSpeed = 53
 const reverseSpeed = 17
-const speedScale = 300 / boostSpeed
+const speedScale = 300 / 53
 const boostDuration = 2.25
 const driftMinSpeed = 8
 const quickBoostDuration = .42
@@ -34,7 +32,7 @@ export function trackOutline(trackPoints = points) {
 const angleOf = (direction) => Math.atan2(-direction.x, -direction.z)
 const damp = (rate, dt) => 1 - Math.exp(-rate * dt)
 
-export function createRace(container, driver, kartProfile, totalLaps, renderHud) {
+export function createRace(container, driver, kartProfile, totalLaps, getPerformance, renderHud) {
   const renderer = new T.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.6))
   renderer.shadowMap.enabled = true
@@ -69,6 +67,7 @@ export function createRace(container, driver, kartProfile, totalLaps, renderHud)
   let travelHeading, driftDirection, drifting, charge, boostRemaining, boostRequested, boostLength
   let countdown, launchWindow, launchRequested, wrongWayTime
   let boostSlots, driftTime, quickWindow, quickReleased, quickRequested, quickRemaining
+  let topSpeed, boostSpeed
   let best = 0
   let active = true
   let lastFrame
@@ -78,7 +77,7 @@ export function createRace(container, driver, kartProfile, totalLaps, renderHud)
   function showHud() {
     renderHud({
       index, lap, time: elapsed, best, speed: Math.round(Math.abs(velocity) * speedScale), finished, drifting, charge, boostSlots,
-      boost: boostRemaining > 0 || quickRemaining > 0,
+      boost: boostRemaining > 0 || quickRemaining > 0, speedCap: Math.round(boostSpeed * speedScale),
       quickBoost: quickRemaining > 0,
       launchBoost: boostRemaining > 0 && boostLength === launchBoostDuration,
       countdown: Math.ceil(countdown),
@@ -108,6 +107,9 @@ export function createRace(container, driver, kartProfile, totalLaps, renderHud)
 
   function reset() {
     clearKeys()
+    const { base, boost } = getPerformance()
+    topSpeed = base.speed / speedScale
+    boostSpeed = boost.speed / speedScale
     pos.copy(points[startIndex])
     index = startIndex
     heading = travelHeading = angleOf(tangents[index])
@@ -167,23 +169,27 @@ export function createRace(container, driver, kartProfile, totalLaps, renderHud)
       launchWindow = Math.max(0, launchWindow - dt)
     }
     launchRequested = false
-    if (boostRequested && boostSlots > 0 && velocity > 0 && !brake && boostRemaining === 0) {
+    if (boostRequested && boostSlots > 0 && throttle && velocity > 0 && !brake && boostRemaining === 0) {
       boostRemaining = boostLength = boostDuration
       boostSlots--
     }
     boostRequested = false
-    if (brake) boostRemaining = quickRemaining = 0
+    if (brake || !throttle) boostRemaining = quickRemaining = 0
 
     if (!keys.has('Shift') || velocity < driftMinSpeed || brake) driftDirection = 0
     else if (steer && !driftDirection) driftDirection = steer
     const wasDrifting = drifting
     drifting = driftDirection !== 0
     quickWindow = Math.max(0, quickWindow - dt)
-    if (wasDrifting && !drifting && driftTime >= minDriftTime && !brake) quickWindow = quickBoostWindow
-    if (drifting || brake) quickWindow = 0
+    if (wasDrifting && !drifting && driftTime >= minDriftTime && !brake && quickWindow === 0) {
+      quickWindow = quickBoostWindow
+    }
+    if (brake) quickWindow = 0
     if (quickWindow > 0 && quickRequested && throttle && velocity > 0) {
       quickRemaining = quickBoostDuration
-      quickWindow = 0
+      quickWindow = driftTime = 0
+      drifting = false
+      driftDirection = 0
     }
     if (quickWindow === 0) quickReleased = false
     quickRequested = false
@@ -288,8 +294,11 @@ export function createRace(container, driver, kartProfile, totalLaps, renderHud)
       steeringKeys.delete(source)
       if (sources?.delete(source) && sources.size === 0) {
         keys.delete(key)
-        if (key === 'ArrowUp' && (quickWindow > 0 || (driftTime >= minDriftTime && !keys.has('Shift')))) {
-          quickReleased = true
+        if (key === 'ArrowUp') {
+          boostRemaining = quickRemaining = 0
+          launchRequested = false
+          if (driftTime >= minDriftTime && quickWindow === 0) quickWindow = quickBoostWindow
+          quickReleased = quickWindow > 0
         }
       }
       return
@@ -325,6 +334,7 @@ export function createRace(container, driver, kartProfile, totalLaps, renderHud)
     keys.clear()
     steeringKeys.clear()
     boostRequested = launchRequested = quickRequested = quickReleased = false
+    boostRemaining = quickRemaining = 0
   }
 
   window.addEventListener('keyup', (event) => {
