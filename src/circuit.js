@@ -1,11 +1,23 @@
 import * as T from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 
-const nodes = [[0, 56], [0, -12], [10, -71], [36, -114], [89, -126], [133, -92], [143, -47], [120, -18], [98, 5], [120, 39], [120, 79], [81, 112], [28, 116], [3, 100]]
 export const sampleCount = 480
-export const track = new T.CatmullRomCurve3(nodes.map(([x, z]) => new T.Vector3(x, 0, z)), true)
-export const points = track.getSpacedPoints(sampleCount).slice(0, -1)
-export const tangents = points.map((_, i) => track.getTangentAt(i / sampleCount))
+export function makeTrack(nodes) {
+  const track = new T.CatmullRomCurve3(nodes.map(([x, z]) => new T.Vector3(x, 0, z)), true)
+  const points = track.getSpacedPoints(sampleCount).slice(0, -1)
+  return { points, tangents: points.map((_, i) => track.getTangentAt(i / sampleCount)) }
+}
+
+let theme
+export let points
+export let tangents
+export function configureCircuit(profile) {
+  theme = profile
+  const layout = makeTrack(profile.nodes)
+  points = layout.points
+  tangents = layout.tangents
+}
+
 export const roadHalf = 7.2
 export const startIndex = 0
 export const finishLineIndex = 24
@@ -148,6 +160,10 @@ function imageTexture(name, redraw) {
 }
 
 function addSky(scene, redraw) {
+  if (theme.id !== 'coast') {
+    scene.background = new T.Color(theme.id === 'alpine' ? 0x8fbbdc : 0xe9af86)
+    return
+  }
   const panorama = imageTexture('coastal-sky.webp', redraw)
   const sky = new T.Mesh(new T.SphereGeometry(1050, 40, 24), new T.ShaderMaterial({
     side: T.BackSide,
@@ -175,15 +191,15 @@ function addBeach(scene, redraw) {
   const sandMap = imageTexture('coastal-sand.webp', redraw)
   sandMap.wrapS = sandMap.wrapT = T.RepeatWrapping
   sandMap.anisotropy = 8
-  const sandMaterial = standard(0xc5b5a2, { map: sandMap, bumpMap: sandMap, bumpScale: .10 })
+  const sandMaterial = standard({ coast: 0xc5b5a2, mesa: 0xc68354, alpine: 0xe1ecf3 }[theme.id], { map: sandMap, bumpMap: sandMap, bumpScale: .10 })
   const sand = new T.PlaneGeometry(364, 820, 64, 144)
   const positions = sand.attributes.position
   const uv = sand.attributes.uv
   for (let i = 0; i < positions.count; i++) {
     const z = -positions.getY(i) - 26
     const shoreWeight = Math.pow(1 - uv.getX(i), 4)
-    const x = positions.getX(i) + 150 + shoreWeight * coastVariation(z)
-    const shoreDrop = Math.max(0, 1 - (positions.getX(i) + 182) / 9)
+    const x = positions.getX(i) + (theme.id === 'coast' ? 150 + shoreWeight * coastVariation(z) : 118)
+    const shoreDrop = theme.id === 'coast' ? Math.max(0, 1 - (positions.getX(i) + 182) / 9) : 0
     positions.setXYZ(i, x, -.19 - shoreDrop * .81, z)
     uv.setXY(i, x / 4.8, z / 4.8)
   }
@@ -250,9 +266,19 @@ function rockyHill() {
 
 function addLandscape(scene, meshes, redraw) {
   addBeach(scene, redraw)
-  addOcean(scene)
+  if (theme.id === 'coast') addOcean(scene)
+  else {
+    const ground = plane(800, 820, standard(theme.id === 'alpine' ? 0xb7cbd5 : 0xac6a4c))
+    ground.position.set(-300, -1.02, -26)
+    ground.receiveShadow = true
+    scene.add(ground)
+  }
 
-  const cliffs = [0x78695f, 0x8c7b66, 0x98826c, 0x998a76, 0x817570].map((color) => standard(color, { flatShading: true }))
+  const cliffs = ({
+    coast: [0x78695f, 0x8c7b66, 0x98826c, 0x998a76, 0x817570],
+    mesa: [0x935439, 0xa6583d, 0x9c613f, 0xbe7951, 0x874f3e],
+    alpine: [0xa5b7c7, 0xcecfce, 0x8698aa, 0xa6b8c8, 0xd5dce2],
+  })[theme.id].map((color) => standard(color, { flatShading: true }))
   for (let i = 0; i < 32; i++) {
     const behind = i < 19
     const x = behind ? 44 + i * 13 : 180 + random() * 120
@@ -261,7 +287,7 @@ function addLandscape(scene, meshes, redraw) {
     const height = 12 + random() * 35
     const hill = new T.Mesh(rockyHill(), cliffs[i % cliffs.length])
     hill.position.set(x, height * .35 - 10, z)
-    hill.scale.set(width, height, 15 + random() * 25)
+    hill.scale.set(width, height * (theme.id === 'alpine' ? 1.8 : 1), 15 + random() * 25)
     hill.rotation.set(.15, random() * Math.PI, random() * .32 - .16)
     meshes.push(hill)
   }
@@ -284,9 +310,39 @@ function addLandscape(scene, meshes, redraw) {
     mesh.rotation.y = random() * 5
     meshes.push(mesh)
   }
-  for (const [x, z, size] of [[-11, 42, 1.35], [15, 39, 1.22], [-13, 19, 1], [-17, 3, 1.28], [16, 2, 1.33], [19, -21, 1.27], [-14, -30, 1.28], [-13, -56, 1.4], [28, -51, 1.2], [6, -75, .98], [50, -92, 1.19], [70, -95, 1.2], [115, -128, 1.25], [152, -85, 1.12], [123, -56, 1.15], [86, -10, 1.27], [149, 24, 1.2], [99, 59, 1.43], [-10, 79, 1.3], [70, 92, 1.25], [30, 87, 1.12]]) {
-    if (clearOfTrack(x, z, roadHalf + 2.45)) makePalm(meshes, x, z, size, wood, leaves)
+  if (theme.id === 'coast') {
+    for (const [x, z, size] of [[-11, 42, 1.35], [15, 39, 1.22], [-13, 19, 1], [-17, 3, 1.28], [16, 2, 1.33], [19, -21, 1.27], [-14, -30, 1.28], [-13, -56, 1.4], [28, -51, 1.2], [6, -75, .98], [50, -92, 1.19], [70, -95, 1.2], [115, -128, 1.25], [152, -85, 1.12], [123, -56, 1.15], [86, -10, 1.27], [149, 24, 1.2], [99, 59, 1.43], [-10, 79, 1.3], [70, 92, 1.25], [30, 87, 1.12]]) {
+      if (clearOfTrack(x, z, roadHalf + 2.45)) makePalm(meshes, x, z, size, wood, leaves)
+    }
+  } else {
+    const alpine = theme.id === 'alpine'
+    const foliage = standard(alpine ? 0x3a635b : 0x627246, { flatShading: true })
+    for (let i = 0; i < 100; i++) {
+      const x = -49 + random() * 250
+      const z = -174 + random() * 321
+      const size = .7 + random() * 1.1
+      if (!clearOfTrack(x, z, roadHalf + 2.8)) continue
+      if (alpine) {
+        meshes.push(between(new T.Vector3(x, -.6, z), new T.Vector3(x, 3.4 * size, z), .15 * size, wood, 'cylinder', .08))
+        for (let tier = 0; tier < 3; tier++) {
+          const crown = new T.Mesh(new T.ConeGeometry((1.3 - tier * .25) * size, 2.1 * size, 8), foliage)
+          crown.position.set(x, (1.65 + .78 * tier) * size, z)
+          meshes.push(crown)
+        }
+      } else {
+        const base = new T.Vector3(x, -.4, z)
+        const top = base.clone().setY(2.5 * size)
+        const fork = base.clone().setY(1.25 * size)
+        meshes.push(between(base, top, .19 * size, foliage, 'cylinder', .18 * size))
+        for (const side of [-1, 1]) {
+          const bend = fork.clone().add(new T.Vector3(side * .49 * size, .42 * size, 0))
+          meshes.push(between(fork, bend, .11 * size, foliage, 'cylinder', .11 * size))
+          meshes.push(between(bend, bend.clone().add(new T.Vector3(0, .72 * size, 0)), .11 * size, foliage, 'cylinder', .10 * size))
+        }
+      }
+    }
   }
+
 }
 
 function addTrackside(scene, meshes) {
@@ -295,7 +351,7 @@ function addTrackside(scene, meshes) {
   const yellow = standard(0xf7b83c)
   const dark = standard(0x182b37)
   const steel = standard(0x8296a0, { metalness: .27 })
-  const cyan = standard(0x13b8c7)
+  const cyan = standard(theme.color)
   scene.add(strip(-roadHalf, roadHalf, 0, asphalt()))
   scene.add(strip(-8.7, -roadHalf, -.06, standard(0xa69482)))
   scene.add(strip(roadHalf, 8.7, -.06, standard(0xa69482)))
@@ -342,7 +398,7 @@ function addTrackside(scene, meshes) {
     ctx.font = 'italic 900 70px Arial'
     ctx.textAlign = 'center'
     ctx.fillStyle = '#f7faf3'
-    ctx.fillText('SUNSET COAST', 512, 90)
+    ctx.fillText(theme.english, 512, 90)
     for (const x of [48, 853]) {
       ctx.fillStyle = '#ffcc4a'
       ctx.fillRect(x, 37, 123, 54)

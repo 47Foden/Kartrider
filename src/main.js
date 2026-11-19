@@ -3,6 +3,8 @@ import '@fontsource/barlow-condensed/latin-800-italic.css'
 import '@fontsource/barlow-condensed/latin-900-italic.css'
 import './style.css'
 import { createRace, trackOutline } from './race.js'
+import { configureCircuit, makeTrack } from './circuit.js'
+import { circuits, drivers, karts, selectProfile } from './garage.js'
 
 const iconPaths = {
   bolt: '<path d="M13 2 4 14h7l-1 8 10-12h-7l1-8z"/>',
@@ -20,12 +22,27 @@ const iconPaths = {
 const icon = (name, size = 18) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[name]}</svg>`
 const logo = '<svg width="34" height="30" viewBox="0 0 34 30" aria-hidden="true"><path fill="#31dfef" d="M15 2h9l9 25h-8l-2.9-8H12l3.9-6h4.2l-1.9-5L6 27H0z"/><path fill="#31dfef" opacity=".35" d="M8 2h4L1 20v-6z"/></svg>'
 
+const [circuit, driver, kart] = selectProfile(new URLSearchParams(location.search))
+const selected = { track: circuit.id, driver: driver.id, kart: kart.id }
+const asset = (file) => import.meta.env.BASE_URL + file
+const toPath = (coordinates) => coordinates.map(([x, y], index) => `${index ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ') + ' Z'
+const circuitCards = circuits.map((entry) => {
+  const outline = toPath(trackOutline(makeTrack(entry.nodes).points))
+  return `<button class="choice route-choice" type="button" data-category="track" data-choice="${entry.id}" aria-pressed="false" style="--choice:${entry.color}">
+    <div class="route-art" style="background-image:url('${asset('track-' + entry.id + '.webp')}')"><svg viewBox="0 0 240 136" aria-hidden="true"><path d="${outline}"/></svg></div>
+    <div class="choice-caption"><span>${entry.english}</span><strong>${entry.name}</strong><small>${entry.description}</small></div></button>`
+}).join('')
+const driverCards = drivers.map((entry) => `<button class="choice driver-choice" type="button" data-category="driver" data-choice="${entry.id}" aria-pressed="false">
+  <img src="${asset(entry.image)}" alt=""><div class="choice-caption"><span>${entry.english}</span><strong>${entry.name}</strong></div></button>`).join('')
+const kartCards = karts.map((entry) => `<button class="choice kart-choice" type="button" data-category="kart" data-choice="${entry.id}" aria-pressed="false" style="--choice:${entry.color}">
+  <img src="${asset('kart-' + entry.id + '.webp')}" alt=""><div class="choice-caption"><span>${entry.english}</span><strong>${entry.name}</strong></div></button>`).join('')
+
 document.querySelector('#app').innerHTML = `
   <header class="topbar">
     <div class="nav-shell">
-      <a class="brand" href="#race" aria-label="Apex Kart">${logo}<span>APEX<span class="accent">KART</span></span></a>
+      <a class="brand" href="#lobby" aria-label="Apex Kart">${logo}<span>APEX<span class="accent">KART</span></span></a>
       <nav aria-label="메인 메뉴">
-        <button class="nav-tab active" id="raceTab" type="button">${icon('flag')}<span>레이싱</span></button>
+        <button class="nav-tab active" id="raceTab" type="button">${icon('flag')}<span>레이스 준비</span></button>
         <button class="nav-tab" id="mapsTab" type="button">${icon('map')}<span>구글 지도</span></button>
       </nav>
       <span class="mode"><i></i>싱글 플레이</span>
@@ -38,12 +55,32 @@ document.querySelector('#app').innerHTML = `
         <h1 id="pageTitle">선셋 코스트 <em>서킷</em></h1>
         <p id="pageDescription">해안 도로를 질주하며 가장 빠른 랩에 도전하세요.</p>
       </div>
-      <button type="button" class="outline-button" id="reset" aria-label="레이스 다시 시작">${icon('reset', 17)} 다시 시작</button>
+      <button type="button" class="outline-button" id="reset" hidden aria-label="레이스 다시 시작">${icon('reset', 17)} 다시 시작</button>
     </section>
-    <div id="racePage">
+    <div id="lobbyPage" class="lobby">
+      <section class="garage-section">
+        <div class="panel-heading">${icon('map')}<h2>서킷 선택</h2></div>
+        <div class="choices route-choices" role="group" aria-label="서킷 선택">${circuitCards}</div>
+      </section>
+      <div class="garage-grid">
+        <section class="panel garage-section">
+          <div class="panel-heading">${icon('user')}<h2>드라이버 선택</h2></div>
+          <div class="choices driver-choices" role="group" aria-label="드라이버 선택">${driverCards}</div>
+        </section>
+        <section class="panel garage-section">
+          <div class="panel-heading">${icon('car')}<h2>카트 선택</h2></div>
+          <div class="choices kart-choices" role="group" aria-label="카트 선택">${kartCards}</div>
+        </section>
+      </div>
+      <div class="lobby-actions">
+        <span>타임 어택 <i></i> 3 LAP</span>
+        <button type="button" id="startRace" class="start-button">${icon('flag', 20)} 레이스 시작 ${icon('chevron', 18)}</button>
+      </div>
+    </div>
+    <div id="racePage" hidden>
       <div class="dashboard">
         <section class="game-card" aria-label="레이싱 경기">
-          <div class="stage" id="stage" aria-label="3D 선셋 코스트 서킷" tabindex="0">
+          <div class="stage" id="stage" aria-label="3D ${circuit.name} 서킷" tabindex="0">
             <div id="viewport"></div>
             <div class="stage-edge"></div>
             <div class="race-hud">
@@ -66,11 +103,11 @@ document.querySelector('#app').innerHTML = `
             </div>
             <div class="touch-controls" aria-label="터치 조작">
               <div><button type="button" data-key="ArrowLeft" aria-label="좌회전">←</button><button type="button" data-key="ArrowRight" aria-label="우회전">→</button><button type="button" class="action-key" data-key="Shift" aria-label="드리프트">DRIFT</button></div>
-              <div><button type="button" data-key="ArrowDown" aria-label="브레이크">↓</button><button type="button" data-key="ArrowUp" aria-label="가속">↑</button><button type="button" class="action-key" data-key="Space" aria-label="부스터">${icon('bolt', 19)}</button></div>
+              <div><button type="button" data-key="ArrowDown" aria-label="브레이크">↓</button><button type="button" data-key="ArrowUp" aria-label="가속">↑</button><button type="button" class="action-key" data-key="Control" aria-label="부스터">${icon('bolt', 19)}</button></div>
             </div>
           </div>
           <div class="stage-footer">
-            <div>${icon('flag', 17)} <strong>선셋 코스트</strong><span class="separator"></span><span>타임 어택</span></div>
+            <div>${icon('flag', 17)} <strong>${circuit.name}</strong><span class="separator"></span><span>타임 어택</span></div>
             <span class="best">BEST LAP <strong id="best">--:--.---</strong></span>
           </div>
         </section>
@@ -88,26 +125,26 @@ document.querySelector('#app').innerHTML = `
           </section>
           <section class="panel driver-panel">
             <div class="panel-heading">${icon('user', 17)}<h2>드라이버</h2></div>
-            <div class="driver"><img src="${import.meta.env.BASE_URL}driver.webp" alt="파란 헬멧을 쓴 북극여우 드라이버 프로스트"><div><strong>프로스트</strong><span>FROST</span></div></div>
-            <div class="kart-label">${icon('car', 17)}<span>카트</span><strong>옐로우 스프린트</strong></div>
+            <div class="driver"><img src="${asset(driver.image)}" alt="${driver.name}"><div><strong>${driver.name}</strong><span>${driver.english}</span></div></div>
+            <div class="kart-label">${icon('car', 17)}<span>카트</span><strong>${kart.name}</strong></div>
           </section>
         </aside>
       </div>
       <section class="panel controls" aria-label="키보드 조작법">
         <div class="panel-heading">${icon('keyboard', 20)}<h2>조작법</h2></div>
         <div class="control-list">
-          <span><kbd>↑</kbd> 가속</span><span><kbd>↓</kbd> 브레이크 · 후진</span><span><kbd>←</kbd><kbd>→</kbd> 방향 전환</span><span><kbd>Shift</kbd> 드리프트</span><span><kbd>Space</kbd> 부스터</span><span><kbd>R</kbd> 다시 시작</span>
+          <span><kbd>↑</kbd> 가속</span><span><kbd>↓</kbd> 브레이크 · 후진</span><span><kbd>←</kbd><kbd>→</kbd> 방향 전환</span><span><kbd>Shift</kbd> 드리프트</span><span><kbd>Ctrl</kbd> 부스터</span><span><kbd>R</kbd> 다시 시작</span>
         </div>
       </section>
     </div>
     <section id="mapsPage" class="panel map-page" hidden>
       <form id="locationForm" class="map-form">
         <label for="location">${icon('marker')} Google 지도 검색</label>
-        <div class="search-group"><input type="search" id="location" value="Santa Monica Pier, California" required maxlength="160"><button class="outline-button" type="submit">${icon('search', 17)} 검색</button></div>
+        <div class="search-group"><input type="search" id="location" value="${circuit.place}" required maxlength="160"><button class="outline-button" type="submit">${icon('search', 17)} 검색</button></div>
         <a id="externalMap" target="_blank" rel="noopener noreferrer">Google Maps에서 열기 ${icon('chevron', 15)}</a>
       </form>
       <iframe id="googleMap" title="Google 지도" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
-      <p class="map-caption">선셋 코스트의 배경이 된 장소를 둘러보거나 다른 지역을 검색해 보세요.</p>
+      <p class="map-caption">서킷의 배경이 된 장소를 둘러보거나 다른 지역을 검색해 보세요.</p>
     </section>
     <footer class="footer"><span>APEX KART</span><span>ARCADE RACING</span></footer>
   </main>
@@ -120,37 +157,44 @@ const formatTime = (value) => {
   const ms = Math.floor(value * 1000)
   return `${String(Math.floor(ms / 60000)).padStart(2, '0')}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}.${String(ms % 1000).padStart(3, '0')}`
 }
-const outline = trackOutline()
-const trackPath = outline.map(([x, y], index) => `${index ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ') + ' Z'
-byId('trackPath').setAttribute('d', trackPath)
-byId('trackShadow').setAttribute('d', trackPath)
-
 let race
-try {
-  race = createRace(byId('viewport'), (state) => {
-    byId('lap').firstChild.textContent = state.lap
-    byId('time').textContent = formatTime(state.time)
-    byId('best').textContent = state.best ? formatTime(state.best) : '--:--.---'
-    byId('speed').textContent = String(state.speed).padStart(3, '0')
-    byId('speedArc').style.strokeDasharray = `${Math.max(2, state.speed / 1.76)} 100`
-    const boostState = state.boost > 0 ? 'active' : state.charge >= 1 ? 'ready' : state.drifting ? 'drift' : 'charge'
-    byId('boostHud').dataset.state = boostState
-    byId('boostMeter').value = Math.round((state.boost || state.charge) * 100)
-    byId('boostStatus').textContent = {
-      active: '부스터 작동 중', ready: '부스터 준비', drift: '드리프트 중', charge: '드리프트로 충전',
-    }[boostState]
-    const [x, y] = outline[state.index]
-    byId('trackDot').setAttribute('cx', x)
-    byId('trackDot').setAttribute('cy', y)
-    byId('raceStart').hidden = state.started
-    notice.hidden = !state.finished
-    if (state.finished) notice.textContent = `완주!  ${formatTime(state.time)}  ·  R 키로 다시 시작`
-  })
-} catch (error) {
-  console.error(error)
-  notice.textContent = '3D 화면을 열 수 없습니다. WebGL을 지원하는 브라우저에서 다시 시도해 주세요.'
-  notice.hidden = false
-  byId('raceStart').hidden = true
+let raceInitialized = false
+function initRace() {
+  if (raceInitialized) return
+  raceInitialized = true
+  configureCircuit(circuit)
+  const outline = trackOutline()
+  const path = toPath(outline)
+  byId('trackPath').setAttribute('d', path)
+  byId('trackPath').setAttribute('stroke', circuit.color)
+  byId('trackShadow').setAttribute('d', path)
+  try {
+    race = createRace(byId('viewport'), driver, kart, (state) => {
+      byId('lap').firstChild.textContent = state.lap
+      byId('time').textContent = formatTime(state.time)
+      byId('best').textContent = state.best ? formatTime(state.best) : '--:--.---'
+      byId('speed').textContent = String(state.speed).padStart(3, '0')
+      byId('speedArc').style.strokeDasharray = `${Math.max(2, state.speed / 3)} 100`
+      const boostState = state.boost > 0 ? 'active' : state.charge >= 1 ? 'ready' : state.drifting ? 'drift' : 'charge'
+      byId('boostHud').dataset.state = boostState
+      byId('boostMeter').value = Math.round((state.boost || state.charge) * 100)
+      byId('boostStatus').textContent = {
+        active: '부스터 작동 중', ready: '부스터 준비', drift: '드리프트 중', charge: '드리프트로 충전',
+      }[boostState]
+      const [x, y] = outline[state.index]
+      byId('trackDot').setAttribute('cx', x)
+      byId('trackDot').setAttribute('cy', y)
+      stage.classList.toggle('wall-hit', state.impact > .09)
+      byId('raceStart').hidden = state.started
+      notice.hidden = !state.finished
+      if (state.finished) notice.textContent = `완주!  ${formatTime(state.time)}  ·  R 키로 다시 시작`
+    })
+  } catch (error) {
+    console.error(error)
+    notice.textContent = '3D 화면을 열 수 없습니다. WebGL을 지원하는 브라우저에서 다시 시도해 주세요.'
+    notice.hidden = false
+    byId('raceStart').hidden = true
+  }
 }
 
 function setMap(place) {
@@ -161,20 +205,52 @@ function setMap(place) {
 
 function syncPage() {
   const maps = location.hash === '#maps'
-  byId('racePage').hidden = maps
+  const racing = location.hash === '#race'
+  byId('lobbyPage').hidden = maps || racing
+  byId('racePage').hidden = !racing
   byId('mapsPage').hidden = !maps
   byId('raceTab').classList.toggle('active', !maps)
   byId('mapsTab').classList.toggle('active', maps)
   byId('raceTab').setAttribute('aria-current', maps ? 'false' : 'page')
   byId('mapsTab').setAttribute('aria-current', maps ? 'page' : 'false')
-  byId('reset').hidden = maps
-  byId('pageTitle').innerHTML = maps ? '구글 <em>지도</em>' : '선셋 코스트 <em>서킷</em>'
-  byId('pageDescription').textContent = maps ? 'Google 지도에서 실제 장소를 검색하세요.' : '해안 도로를 질주하며 가장 빠른 랩에 도전하세요.'
-  race?.setActive(!maps)
+  byId('reset').hidden = !racing
+  byId('pageTitle').innerHTML = maps ? '구글 <em>지도</em>' : racing ? `${circuit.name} <em>서킷</em>` : '레이스 <em>준비</em>'
+  byId('pageDescription').textContent = maps ? 'Google 지도에서 실제 장소를 검색하세요.' : racing ? circuit.description : '서킷, 드라이버, 카트를 선택하고 출발하세요.'
+  if (racing) {
+    initRace()
+    stage.focus({ preventScroll: true })
+  }
+  race?.setActive(racing)
   if (maps && !byId('googleMap').hasAttribute('src')) setMap(byId('location').value)
+  window.scrollTo(0, 0)
 }
 
-byId('raceTab').onclick = () => { location.hash = '#race' }
+const choices = document.querySelectorAll('[data-choice]')
+function syncChoices() {
+  for (const button of choices) {
+    button.setAttribute('aria-pressed', String(selected[button.dataset.category] === button.dataset.choice))
+  }
+}
+for (const button of choices) {
+  button.onclick = () => {
+    selected[button.dataset.category] = button.dataset.choice
+    syncChoices()
+  }
+}
+syncChoices()
+
+byId('startRace').onclick = () => {
+  if (selected.track === circuit.id && selected.driver === driver.id && selected.kart === kart.id) {
+    race?.reset()
+    location.hash = '#race'
+    return
+  }
+  const url = new URL(location.href)
+  for (const [key, value] of Object.entries(selected)) url.searchParams.set(key, value)
+  url.hash = '#race'
+  location.assign(url)
+}
+byId('raceTab').onclick = () => { location.hash = '#lobby' }
 byId('mapsTab').onclick = byId('openMap').onclick = () => { location.hash = '#maps' }
 window.addEventListener('hashchange', syncPage)
 syncPage()
