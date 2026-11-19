@@ -138,8 +138,10 @@ kbd { display: inline-grid; min-width: 25px; height: 25px; place-items: center; 
   .control-list { gap: 10px 13px; }
 }
 
-.boost-hud { position: absolute; left: 19px; bottom: 21px; display: flex; align-items: center; gap: 10px; width: 174px; padding: 10px; background: #091422dc; border: 1px solid #9bdaf94a; border-radius: 7px; color: var(--cyan); pointer-events: none; }
-.boost-hud > svg { flex: none; }
+.boost-hud { position: absolute; left: 19px; top: 81px; display: flex; align-items: center; gap: 9px; width: 205px; padding: 10px; background: #091422dc; border: 1px solid #9bdaf94a; border-radius: 7px; color: var(--cyan); pointer-events: none; }
+.boost-slots { display: flex; gap: 4px; flex: none; }
+.boost-slot { display: grid; place-items: center; width: 25px; height: 25px; background: #142335; border: 1px solid #3b4e63; border-radius: 5px; color: #6b8097; }
+.boost-slot.filled { background: #ffd858; border-color: #ffe588; color: #20222a; box-shadow: 0 0 9px #ffd85870; }
 .boost-details { flex: 1; min-width: 0; }
 .boost-details > div { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
 .boost-details strong { font: italic 800 16px/1 var(--display); letter-spacing: .08em; }
@@ -152,8 +154,9 @@ kbd { display: inline-grid; min-width: 25px; height: 25px; place-items: center; 
 .boost-hud[data-state="active"] { color: #92efff; border-color: #78d6ff; box-shadow: 0 0 21px #1baff069; }
 .control-list kbd { padding-inline: 4px; }
 @media (pointer: coarse) {
-  .boost-hud { left: 10px; bottom: 59px; width: 119px; padding: 6px; gap: 5px; }
-  .boost-hud > svg { width: 14px; }
+  .boost-hud { left: 19px; width: 170px; padding: 6px; gap: 5px; }
+  .boost-slot { width: 21px; height: 21px; }
+  .boost-slot svg { width: 13px; }
   .boost-details strong { font-size: 12px; }
   .boost-details span { font-size: 8px; }
   .touch-controls button { display: inline-grid; place-items: center; vertical-align: bottom; }
@@ -212,9 +215,12 @@ kbd { display: inline-grid; min-width: 25px; height: 25px; place-items: center; 
 .race-countdown { position: absolute; inset: 34% 0 auto; display: grid; justify-items: center; gap: 9px; pointer-events: none; }
 #countdownNumber { color: white; font: italic 900 clamp(68px, 12vw, 150px)/.8 var(--display); letter-spacing: -.04em; text-shadow: 0 3px 10px #091525, 0 0 26px #07192a; }
 .launch-ready #countdownNumber { color: #65f4ff; }
-.countdown-hint { padding: 6px 12px; border-radius: 20px; border: 1px solid #9bdaf94a; background: #091422de; color: #f3f8ff; font-size: 12px; font-weight: 700; }
-.countdown-hint:empty { display: none; }
 .wrong-way { position: absolute; z-index: 2; inset: 24% auto auto 50%; transform: translateX(-50%); display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 1px 9px; padding: 7px 14px; border: 1px solid #ff9973; border-radius: 7px; background: #331913f0; color: #ffbb9d; white-space: nowrap; pointer-events: none; }
 .wrong-way > span { grid-row: span 2; font-size: 24px; line-height: 1; }
 .wrong-way strong { color: #fff0e7; font-size: 17px; }
 .wrong-way small { font-size: 11px; }
+
+@media (max-width: 520px) {
+  .boost-hud { top: 56px; left: 10px; width: 163px; padding: 6px; }
+  .wrong-way { top: 39%; }
+}

@@ -2,7 +2,7 @@ import '@fontsource/barlow-condensed/latin-700.css'
 import '@fontsource/barlow-condensed/latin-800-italic.css'
 import '@fontsource/barlow-condensed/latin-900-italic.css'
 import './style.css'
-import { createRace, trackOutline } from './race.js'
+import { boostSlotCount, createRace, totalLaps, trackOutline } from './race.js'
 import { configureCircuit, makeTrack } from './circuit.js'
 import { circuits, drivers, karts, selectProfile } from './garage.js'
 
@@ -70,7 +70,7 @@ document.querySelector('#app').innerHTML = `
         </section>
       </div>
       <div class="lobby-actions">
-        <span>타임 어택 <i></i> 3 LAP</span>
+        <span>타임 어택 <i></i> ${totalLaps} LAP</span>
         <button type="button" id="startRace" class="start-button">${icon('flag', 20)} 레이스 시작 ${icon('chevron', 18)}</button>
       </div>
     </div>
@@ -81,23 +81,24 @@ document.querySelector('#app').innerHTML = `
             <div id="viewport"></div>
             <div class="stage-edge"></div>
             <div class="race-hud">
-              <div class="stat"><span>LAP</span><strong id="lap">1<small> / 3</small></strong></div>
+              <div class="stat"><span>LAP</span><strong id="lap">1<small> / ${totalLaps}</small></strong></div>
               <div class="stat time"><span>TIME</span><strong id="time">00:00.000</strong></div>
             </div>
             <button class="fullscreen" type="button" id="fullscreen" aria-label="전체 화면" title="전체 화면">${icon('expand', 20)}</button>
             <div class="notice" id="notice" hidden></div>
             <div class="race-countdown" id="raceCountdown" hidden>
               <span id="countdownNumber" role="status"></span>
-              <span class="countdown-hint" id="countdownHint"></span>
             </div>
             <div class="wrong-way" id="wrongWay" role="status" hidden>
               <span aria-hidden="true">↶</span><strong>역주행</strong><small>진행 방향으로 돌아가세요</small>
             </div>
             <div class="boost-hud" id="boostHud" data-state="charge">
-              ${icon('bolt', 18)}
+              <div class="boost-slots" id="boostSlots" role="img" aria-label="저장한 부스터 0개">
+                ${Array.from({ length: boostSlotCount }, () => `<span class="boost-slot">${icon('bolt', 16)}</span>`).join('')}
+              </div>
               <div class="boost-details">
                 <div><strong>BOOST</strong><span id="boostStatus">드리프트로 충전</span></div>
-                <progress id="boostMeter" max="100" value="0" aria-label="부스터 충전량"></progress>
+                <progress id="boostMeter" max="100" value="0" aria-label="다음 부스터 충전량"></progress>
               </div>
             </div>
             <div class="speedometer" aria-label="속도계">
@@ -146,6 +147,8 @@ document.querySelector('#app').innerHTML = `
 const byId = (id) => document.getElementById(id)
 const stage = byId('stage')
 const notice = byId('notice')
+const boostSlots = byId('boostSlots')
+const slots = [...boostSlots.children]
 const formatTime = (value) => {
   const ms = Math.floor(value * 1000)
   return `${String(Math.floor(ms / 60000)).padStart(2, '0')}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}.${String(ms % 1000).padStart(3, '0')}`
@@ -168,13 +171,16 @@ function initRace() {
       byId('best').textContent = state.best ? formatTime(state.best) : '--:--.---'
       byId('speed').textContent = String(state.speed).padStart(3, '0')
       byId('speedArc').style.strokeDasharray = `${Math.max(2, state.speed / 3)} 100`
-      const boostState = state.boost > 0 ? 'active' : state.charge >= 1 ? 'ready' : state.drifting ? 'drift' : 'charge'
+      const boostState = state.boost ? 'active' : state.boostSlots > 0 ? 'ready' : state.drifting ? 'drift' : 'charge'
       byId('boostHud').dataset.state = boostState
-      byId('boostMeter').value = Math.round((state.boost || state.charge) * 100)
-      byId('boostStatus').textContent = {
-        active: '부스터 작동 중', ready: '부스터 준비', drift: '드리프트 중', charge: '드리프트로 충전',
+      byId('boostMeter').value = state.boostSlots === boostSlotCount ? 100 : Math.round(state.charge * 100)
+      const slotLabel = `저장한 부스터 ${state.boostSlots}개 / ${boostSlotCount}칸`
+      if (boostSlots.getAttribute('aria-label') !== slotLabel) boostSlots.setAttribute('aria-label', slotLabel)
+      slots.forEach((slot, index) => slot.classList.toggle('filled', index < state.boostSlots))
+      const boostLabel = {
+        active: '부스터 작동 중', ready: 'Ctrl 사용', drift: '드리프트 중', charge: '드리프트로 충전',
       }[boostState]
-      if (state.launchBoost) byId('boostStatus').textContent = '출발 부스터'
+      byId('boostStatus').textContent = state.quickBoost ? '순간 부스터' : state.launchBoost ? '출발 부스터' : boostLabel
       const [x, y] = outline[state.index]
       byId('trackDot').setAttribute('cx', x)
       byId('trackDot').setAttribute('cy', y)
@@ -183,9 +189,6 @@ function initRace() {
       byId('raceCountdown').classList.toggle('launch-ready', state.launchReady || state.showGo)
       const countText = counting ? String(state.countdown) : 'GO!'
       if (byId('countdownNumber').textContent !== countText) byId('countdownNumber').textContent = countText
-      byId('countdownHint').textContent = counting
-        ? state.launchReady ? '지금 가속! ↑ / W' : '출발 직전에 ↑ / W를 눌러 부스터'
-        : state.launchBoost ? '출발 부스터!' : ''
       byId('wrongWay').hidden = !state.wrongWay
       notice.hidden = !state.finished
       if (state.finished) notice.textContent = `완주!  ${formatTime(state.time)}  ·  R 키로 다시 시작`
