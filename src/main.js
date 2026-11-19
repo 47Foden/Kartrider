@@ -5,6 +5,7 @@ import './style.css'
 import { createRace, trackOutline } from './race.js'
 
 const iconPaths = {
+  bolt: '<path d="M13 2 4 14h7l-1 8 10-12h-7l1-8z"/>',
   flag: '<path d="M5 21V4m0 1c5-4 9 4 15 0v11c-6 4-10-4-15 0"/><path d="M5 9c5-4 9 4 15 0M10 4v11m5-10v11"/>',
   map: '<path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3zm6-3v15m6-12v15"/>',
   marker: '<path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',
@@ -52,13 +53,20 @@ document.querySelector('#app').innerHTML = `
             <button class="fullscreen" type="button" id="fullscreen" aria-label="전체 화면" title="전체 화면">${icon('expand', 20)}</button>
             <div class="notice" id="notice" hidden></div>
             <div class="race-start" id="raceStart"><span class="ready-dot"></span> <span><kbd>↑</kbd> 키로 출발</span></div>
+            <div class="boost-hud" id="boostHud" data-state="charge">
+              ${icon('bolt', 18)}
+              <div class="boost-details">
+                <div><strong>BOOST</strong><span id="boostStatus">드리프트로 충전</span></div>
+                <progress id="boostMeter" max="100" value="0" aria-label="부스터 충전량"></progress>
+              </div>
+            </div>
             <div class="speedometer" aria-label="속도계">
               <svg viewBox="0 0 120 104" aria-hidden="true"><path class="gauge-bg" d="M21 87a49 49 0 1 1 78 0"/><path id="speedArc" class="gauge-line" pathLength="100" d="M21 87a49 49 0 1 1 78 0"/></svg>
               <div class="speed-value"><strong id="speed">000</strong><span>KM/H</span></div>
             </div>
             <div class="touch-controls" aria-label="터치 조작">
-              <div><button type="button" data-key="ArrowLeft" aria-label="좌회전">←</button><button type="button" data-key="ArrowRight" aria-label="우회전">→</button></div>
-              <div><button type="button" data-key="ArrowDown" aria-label="브레이크">↓</button><button type="button" data-key="ArrowUp" aria-label="가속">↑</button></div>
+              <div><button type="button" data-key="ArrowLeft" aria-label="좌회전">←</button><button type="button" data-key="ArrowRight" aria-label="우회전">→</button><button type="button" class="action-key" data-key="Shift" aria-label="드리프트">DRIFT</button></div>
+              <div><button type="button" data-key="ArrowDown" aria-label="브레이크">↓</button><button type="button" data-key="ArrowUp" aria-label="가속">↑</button><button type="button" class="action-key" data-key="Space" aria-label="부스터">${icon('bolt', 19)}</button></div>
             </div>
           </div>
           <div class="stage-footer">
@@ -88,7 +96,7 @@ document.querySelector('#app').innerHTML = `
       <section class="panel controls" aria-label="키보드 조작법">
         <div class="panel-heading">${icon('keyboard', 20)}<h2>조작법</h2></div>
         <div class="control-list">
-          <span><kbd>↑</kbd> 가속</span><span><kbd>↓</kbd> 브레이크 · 후진</span><span><kbd>←</kbd><kbd>→</kbd> 방향 전환</span><span><kbd>R</kbd> 다시 시작</span>
+          <span><kbd>↑</kbd> 가속</span><span><kbd>↓</kbd> 브레이크 · 후진</span><span><kbd>←</kbd><kbd>→</kbd> 방향 전환</span><span><kbd>Shift</kbd> 드리프트</span><span><kbd>Space</kbd> 부스터</span><span><kbd>R</kbd> 다시 시작</span>
         </div>
       </section>
     </div>
@@ -124,7 +132,13 @@ try {
     byId('time').textContent = formatTime(state.time)
     byId('best').textContent = state.best ? formatTime(state.best) : '--:--.---'
     byId('speed').textContent = String(state.speed).padStart(3, '0')
-    byId('speedArc').style.strokeDasharray = `${Math.max(2, state.speed / 1.18)} 100`
+    byId('speedArc').style.strokeDasharray = `${Math.max(2, state.speed / 1.76)} 100`
+    const boostState = state.boost > 0 ? 'active' : state.charge >= 1 ? 'ready' : state.drifting ? 'drift' : 'charge'
+    byId('boostHud').dataset.state = boostState
+    byId('boostMeter').value = Math.round((state.boost || state.charge) * 100)
+    byId('boostStatus').textContent = {
+      active: '부스터 작동 중', ready: '부스터 준비', drift: '드리프트 중', charge: '드리프트로 충전',
+    }[boostState]
     const [x, y] = outline[state.index]
     byId('trackDot').setAttribute('cx', x)
     byId('trackDot').setAttribute('cy', y)

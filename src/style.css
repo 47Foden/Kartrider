@@ -152,3 +152,25 @@ kbd { display: inline-grid; min-width: 25px; height: 25px; place-items: center; 
   .controls { align-items: flex-start; gap: 12px; flex-direction: column; }
   .control-list { gap: 10px 13px; }
 }
+
+.boost-hud { position: absolute; left: 19px; bottom: 21px; display: flex; align-items: center; gap: 10px; width: 174px; padding: 10px; background: #091422dc; border: 1px solid #9bdaf94a; border-radius: 7px; color: var(--cyan); pointer-events: none; }
+.boost-hud > svg { flex: none; }
+.boost-details { flex: 1; min-width: 0; }
+.boost-details > div { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.boost-details strong { font: italic 800 16px/1 var(--display); letter-spacing: .08em; }
+.boost-details span { color: #d4e5ef; font-size: 9px; white-space: nowrap; }
+.boost-details progress { appearance: none; display: block; margin-top: 5px; width: 100%; height: 5px; border: 0; border-radius: 3px; overflow: hidden; background: #344658; accent-color: var(--cyan); }
+.boost-details progress::-webkit-progress-bar { background: #344658; }
+.boost-details progress::-webkit-progress-value { background: currentColor; }
+.boost-details progress::-moz-progress-bar { background: currentColor; }
+.boost-hud[data-state="ready"] { color: #ffdd5e; border-color: #ffdd5e8c; }
+.boost-hud[data-state="active"] { color: #92efff; border-color: #78d6ff; box-shadow: 0 0 21px #1baff069; }
+.control-list kbd { padding-inline: 4px; }
+@media (pointer: coarse) {
+  .boost-hud { left: 10px; bottom: 59px; width: 119px; padding: 6px; gap: 5px; }
+  .boost-hud > svg { width: 14px; }
+  .boost-details strong { font-size: 12px; }
+  .boost-details span { font-size: 8px; }
+  .touch-controls button { display: inline-grid; place-items: center; vertical-align: bottom; }
+  .touch-controls .action-key { color: #8cf1fa; font: 700 11px/1 var(--display); }
+}

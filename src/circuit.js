@@ -11,7 +11,6 @@ export const startIndex = 0
 export const finishLineIndex = 24
 
 const standard = (color, extra = {}) => new T.MeshStandardMaterial({ color, roughness: .86, ...extra })
-const basic = (color) => new T.MeshBasicMaterial({ color })
 const random = (() => {
   let seed = 2187
   return () => {
@@ -56,17 +55,17 @@ function texture(width, height, paint) {
 
 function asphalt() {
   const road = texture(256, 256, (ctx) => {
-    ctx.fillStyle = '#4e555b'
+    ctx.fillStyle = '#41464a'
     ctx.fillRect(0, 0, 256, 256)
     for (let i = 0; i < 22000; i++) {
-      ctx.fillStyle = random() < .5 ? '#202b3640' : '#d4d5ca36'
+      ctx.fillStyle = random() < .5 ? '#22262732' : '#cfcbc12b'
       ctx.fillRect(random() * 256, random() * 256, 1 + random() * 2, 1)
     }
   })
   road.wrapS = road.wrapT = T.RepeatWrapping
-  road.repeat.set(.3, .3)
+  road.repeat.set(.48, .45)
   road.anisotropy = 8
-  return standard(0xffffff, { map: road })
+  return standard(0xffffff, { map: road, bumpMap: road, bumpScale: .026 })
 }
 
 function box(width, height, depth, material, x = 0, y = 0, z = 0) {
@@ -114,18 +113,18 @@ function makePalm(meshes, x, z, size, wood, leaves) {
   const top = foot.clone().add(new T.Vector3(.98 * size, 5.3 * size, .15 * size))
   meshes.push(between(foot, mid, .29 * size, wood, 'cylinder', .23 * size))
   meshes.push(between(mid, top, .23 * size, wood, 'cylinder', .15 * size))
-  for (let i = 0; i < 9; i++) {
-    const angle = i * Math.PI * 2 / 9 + .33
+  for (let i = 0; i < 12; i++) {
+    const angle = i * Math.PI * 2 / 12 + .33
     const length = (2.25 + random() * 1.2) * size
     const direction = new T.Vector3(Math.cos(angle), 0, Math.sin(angle))
     const side = new T.Vector3(-direction.z, 0, direction.x)
     const positions = []
     let previous = [top, top, top]
-    for (let step = 1; step <= 5; step++) {
-      const t = step / 5
+    for (let step = 1; step <= 16; step++) {
+      const t = step / 16
       const center = top.clone().addScaledVector(direction, t * length)
       center.y += (Math.sin(t * Math.PI) * .85 - t * .51) * size
-      const width = (Math.sin(Math.PI * t) * .43 + .025) * size
+      const width = (Math.sin(Math.PI * t) * (step % 2 ? .31 : .46) + .025) * size
       const left = center.clone().addScaledVector(side, width)
       const right = center.clone().addScaledVector(side, -width)
       left.y -= width * .65
@@ -142,76 +141,125 @@ function makePalm(meshes, x, z, size, wood, leaves) {
   }
 }
 
-function addSky(scene) {
-  const sky = new T.Mesh(new T.SphereGeometry(1050, 32, 20), new T.ShaderMaterial({
+function imageTexture(name, redraw) {
+  const map = new T.TextureLoader().load(import.meta.env.BASE_URL + name, redraw)
+  map.colorSpace = T.SRGBColorSpace
+  return map
+}
+
+function addSky(scene, redraw) {
+  const panorama = imageTexture('coastal-sky.webp', redraw)
+  const sky = new T.Mesh(new T.SphereGeometry(1050, 40, 24), new T.ShaderMaterial({
     side: T.BackSide,
     depthWrite: false,
+    uniforms: { panorama: { value: panorama } },
     vertexShader: 'varying vec3 vPos; void main() { vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: `
+      uniform sampler2D panorama;
       varying vec3 vPos;
       void main() {
         vec3 d = normalize(vPos);
-        float t = clamp(d.y * 2.4, 0., 1.);
-        vec3 color = mix(vec3(.69,.86,.88),vec3(.09,.53,.80),pow(t,.55));
-        vec3 sun = normalize(vec3(-.58,.27,-.77));
-        color += vec3(.43,.30,.08) * pow(max(dot(d,sun),0.),17.);
-        color = mix(color,vec3(1.,.98,.77),smoothstep(.997,.9985,dot(d,sun)));
+        float heading = atan(d.x,-d.z);
+        float u = .5 + asin(sin(heading)) / 3.14159;
+        float v = clamp(.035 + asin(d.y) / .53, .022, .98);
+        vec3 photo = texture2D(panorama, vec2(u,v)).rgb;
+        photo = pow(photo, vec3(1.0 / 2.2));
+        vec3 color = mix(photo, vec3(.30,.46,.61), smoothstep(.4,1.,d.y));
         gl_FragColor = vec4(color,1.);
       }`,
   }))
   scene.add(sky)
-
-  const cloud = texture(512, 192, (ctx) => {
-    for (const [x, y, rx, ry] of [[85, 105, 81, 43], [160, 81, 96, 62], [250, 69, 110, 68], [334, 104, 126, 48], [433, 119, 77, 36]]) {
-      ctx.save()
-      ctx.translate(x, y)
-      ctx.scale(rx, ry)
-      const gradient = ctx.createRadialGradient(0, -.15, .05, 0, 0, 1)
-      gradient.addColorStop(0, '#fff9e9')
-      gradient.addColorStop(.45, '#fffdf3c9')
-      gradient.addColorStop(1, '#fffff000')
-      ctx.fillStyle = gradient
-      ctx.fillRect(-1, -1, 2, 2)
-      ctx.restore()
-    }
-  })
-  const cloudMaterial = new T.SpriteMaterial({ map: cloud, transparent: true, opacity: .83, depthWrite: false, fog: false })
-  for (const [x, y, z, width] of [[-106, 45, -200, 91], [46, 64, -244, 97], [138, 31, -226, 64], [-198, 76, -246, 109], [216, 75, -225, 111], [-35, 38, -210, 78], [116, 59, 247, 94], [-168, 57, 220, 76]]) {
-    const sprite = new T.Sprite(cloudMaterial)
-    sprite.position.set(x, y, z)
-    sprite.scale.set(width, width * .375, 1)
-    scene.add(sprite)
-  }
 }
 
-function addLandscape(scene, meshes) {
-  const sand = plane(360, 820, standard(0xd5a677))
-  sand.position.set(151, -.19, -26)
-  sand.receiveShadow = true
-  scene.add(sand)
-  const ocean = plane(900, 1300, standard(0x258aac, { metalness: .14, roughness: .36 }))
-  ocean.position.set(-477, -.94, -30)
-  scene.add(ocean)
-
-  const foam = basic(0x8bded7)
-  const waves = basic(0x54bec3)
-  for (let i = 0; i < 80; i++) {
-    const edge = i < 38
-    const x = edge ? -30 - random() * 7 : -45 - random() * 92
-    const z = -180 + random() * 335
-    const wave = plane(.08 + random() * .34, 2 + random() * (edge ? 7 : 18), edge ? foam : waves)
-    wave.position.set(x, -.91, z)
-    meshes.push(wave)
+function addBeach(scene, redraw) {
+  const sandMap = imageTexture('coastal-sand.webp', redraw)
+  sandMap.wrapS = sandMap.wrapT = T.RepeatWrapping
+  sandMap.anisotropy = 8
+  const sandMaterial = standard(0xc5b5a2, { map: sandMap, bumpMap: sandMap, bumpScale: .10 })
+  const sand = new T.PlaneGeometry(364, 820, 64, 144)
+  const positions = sand.attributes.position
+  const uv = sand.attributes.uv
+  for (let i = 0; i < positions.count; i++) {
+    const z = -positions.getY(i) - 26
+    const shoreWeight = Math.pow(1 - uv.getX(i), 4)
+    const x = positions.getX(i) + 150 + shoreWeight * coastVariation(z)
+    const shoreDrop = Math.max(0, 1 - (positions.getX(i) + 182) / 9)
+    positions.setXYZ(i, x, -.19 - shoreDrop * .81, z)
+    uv.setXY(i, x / 4.8, z / 4.8)
   }
+  sand.computeVertexNormals()
+  const beach = new T.Mesh(sand, sandMaterial)
+  beach.receiveShadow = true
+  scene.add(beach)
+}
 
-  const cliffs = [0x8c7474, 0x9d7b67, 0xb48c76, 0xc19a7e, 0x8a7776].map((color) => standard(color, { flatShading: true }))
+function coastVariation(z) {
+  return Math.sin(z * .047) * 2.4 + Math.sin(z * .086) * 1.15
+}
+
+function addOcean(scene) {
+  const water = new T.Mesh(new T.PlaneGeometry(1080, 1400), new T.ShaderMaterial({
+    uniforms: { tint: { value: new T.Color(0x397f91) } },
+    vertexShader: `
+      varying vec3 worldPosition;
+      void main() {
+        vec4 world = modelMatrix * vec4(position, 1.);
+        worldPosition = world.xyz;
+        gl_Position = projectionMatrix * viewMatrix * world;
+      }`,
+    fragmentShader: `
+      uniform vec3 tint;
+      varying vec3 worldPosition;
+      void main() {
+        vec2 p = worldPosition.xz;
+        float a = sin(p.x * 1.8 + sin(p.y*.43) + p.y*.11);
+        float b = sin(p.x * 3.2 - p.y*.46 + sin(p.y*.76));
+        float distanceToCamera = distance(worldPosition,cameraPosition);
+        float detail = 1. - smoothstep(30.,240.,distanceToCamera);
+        float shore = -32. + sin(p.y*.047)*2.4 + sin(p.y*.086)*1.15;
+        float breakers = pow(.5 + .5*sin((p.x-shore)*1.45 + sin(p.y*.45)*.67 + sin(p.y*.9)*.23),16.)
+          * smoothstep(shore-9.,shore+1.,p.x)
+          * (.56 + .44 * sin(p.y*.21 + p.x*.34));
+        float shimmer = pow(.5 + .5*a*b, 8.) * detail;
+        vec3 water = tint * (.79 + (a+b)*.065*detail) + vec3(.06,.08,.08)*shimmer;
+        water = mix(water,vec3(.44,.58,.55),breakers*.82*detail);
+        water = mix(water,vec3(.30,.38,.44), smoothstep(48.,580.,distanceToCamera)*.85);
+        gl_FragColor = vec4(water,1.);
+        #include <colorspace_fragment>
+      }`,
+  }))
+  water.rotation.x = -Math.PI / 2
+  water.position.set(-512, -.76, -30)
+  scene.add(water)
+}
+
+function rockyHill() {
+  const geometry = new T.IcosahedronGeometry(1, 4)
+  const position = geometry.attributes.position
+  for (let i = 0; i < position.count; i++) {
+    const x = position.getX(i)
+    const y = position.getY(i)
+    const z = position.getZ(i)
+    const ridge = Math.sin(x * 13 + y * 6) * Math.cos(z * 9 - y * 5) * .07 +
+      Math.sin(z * 19 - x * 10) * .024
+    position.setXYZ(i, x * (1 + ridge), y + ridge - Math.abs(x) * .18, z * (1 + ridge))
+  }
+  geometry.computeVertexNormals()
+  return geometry
+}
+
+function addLandscape(scene, meshes, redraw) {
+  addBeach(scene, redraw)
+  addOcean(scene)
+
+  const cliffs = [0x78695f, 0x8c7b66, 0x98826c, 0x998a76, 0x817570].map((color) => standard(color, { flatShading: true }))
   for (let i = 0; i < 32; i++) {
     const behind = i < 19
-    const x = behind ? -29 + i * 15 : 177 + random() * 111
-    const z = behind ? -226 + random() * 45 : -180 + (i - 19) * 23
+    const x = behind ? 44 + i * 13 : 180 + random() * 120
+    const z = behind ? -258 + random() * 43 : -180 + (i - 19) * 23
     const width = 12 + random() * 28
-    const height = 18 + random() * 35
-    const hill = new T.Mesh(new T.DodecahedronGeometry(1, 0), cliffs[i % cliffs.length])
+    const height = 12 + random() * 35
+    const hill = new T.Mesh(rockyHill(), cliffs[i % cliffs.length])
     hill.position.set(x, height * .35 - 10, z)
     hill.scale.set(width, height, 15 + random() * 25)
     hill.rotation.set(.15, random() * Math.PI, random() * .32 - .16)
@@ -333,10 +381,10 @@ function addTrackside(scene, meshes) {
   }
 }
 
-export function makeCircuit(scene) {
-  addSky(scene)
+export function makeCircuit(scene, redraw) {
+  addSky(scene, redraw)
   const staticMeshes = []
-  addLandscape(scene, staticMeshes)
+  addLandscape(scene, staticMeshes, redraw)
   addTrackside(scene, staticMeshes)
   batch(staticMeshes, scene)
 }

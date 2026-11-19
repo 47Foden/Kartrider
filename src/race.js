@@ -1,9 +1,14 @@
 import * as T from 'three'
 import { makeCircuit, points, tangents, roadHalf, startIndex, finishLineIndex } from './circuit.js'
 import { makeKart } from './kart.js'
+import { makeRaceEffects } from './effects.js'
 
 const totalLaps = 3
-const arrows = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'])
+const drivingKeys = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Shift', 'Space'])
+const topSpeed = 33
+const boostSpeed = 49
+const boostDuration = 2.25
+const driftMinSpeed = 8
 
 export function trackOutline() {
   const bounds = new T.Box3().setFromPoints(points)
@@ -22,30 +27,32 @@ export function createRace(container, renderHud) {
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = T.PCFShadowMap
   renderer.toneMapping = T.ACESFilmicToneMapping
-  renderer.toneMappingExposure = 1.32
+  renderer.toneMappingExposure = 1.12
   container.append(renderer.domElement)
 
   const scene = new T.Scene()
-  scene.fog = new T.FogExp2(0xbcdae0, .0044)
+  scene.fog = new T.FogExp2(0xaebbc4, .0038)
   const camera = new T.PerspectiveCamera(56, 1, .17, 1200)
-  scene.add(new T.HemisphereLight(0xe0f4ff, 0xb58a65, 2.05))
-  const sun = new T.DirectionalLight(0xffebc3, 2.6)
+  scene.add(new T.HemisphereLight(0xd9e9ff, 0xb18b73, 1.90))
+  const sun = new T.DirectionalLight(0xffdfb0, 2.6)
   sun.castShadow = true
   sun.shadow.mapSize.set(1024, 1024)
   Object.assign(sun.shadow.camera, { left: -38, right: 38, top: 38, bottom: -38, near: 1, far: 140 })
   sun.shadow.bias = -.0003
   sun.shadow.normalBias = .055
   scene.add(sun, sun.target)
-  makeCircuit(scene)
+  makeCircuit(scene, () => renderer.render(scene, camera))
   const kart = makeKart(scene)
+  const effects = makeRaceEffects(scene, kart.group)
   const keys = new Set()
   const pos = new T.Vector3()
   const direction = new T.Vector3()
   const desiredCamera = new T.Vector3()
   const desiredLook = new T.Vector3()
   const look = new T.Vector3()
-  const sunOffset = new T.Vector3(-36, 52, -29)
+  const sunOffset = new T.Vector3(-48, 38, -34)
   let heading, velocity, index, progress, elapsed, lapTime, nextCrossing, lap, started, finished
+  let travelHeading, driftDirection, drifting, charge, boostRemaining, boostRequested
   let best = 0
   let active = true
   let lastFrame = performance.now()
@@ -53,11 +60,11 @@ export function createRace(container, renderHud) {
   let renderUntil = 0
 
   function showHud() {
-    renderHud({ index, lap, time: elapsed, best, speed: Math.round(Math.abs(velocity) * 3.6), started, finished })
+    renderHud({ index, lap, time: elapsed, best, speed: Math.round(Math.abs(velocity) * 3.6), started, finished, drifting, charge, boost: boostRemaining / boostDuration })
   }
 
   function updateView(dt) {
-    direction.set(-Math.sin(heading), 0, -Math.cos(heading))
+    direction.set(-Math.sin(travelHeading), 0, -Math.cos(travelHeading))
     kart.group.position.copy(pos)
     kart.group.rotation.y = heading
     const chaseDistance = 7.2 + Math.max(0, velocity) * .028
@@ -66,17 +73,21 @@ export function createRace(container, renderHud) {
     camera.position.lerp(desiredCamera, damp(9, dt))
     look.lerp(desiredLook, damp(8, dt))
     camera.lookAt(look)
-    camera.fov = T.MathUtils.lerp(camera.fov, 56 + Math.max(0, velocity) * .115, damp(4, dt))
+    camera.fov = T.MathUtils.lerp(camera.fov, 56 + Math.max(0, velocity) * .115 + (boostRemaining > 0 ? 5 : 0), damp(4, dt))
     camera.updateProjectionMatrix()
     sun.target.position.copy(pos)
     sun.position.copy(pos).add(sunOffset)
+    effects.update(Number.isFinite(dt) ? dt : 0, drifting, boostRemaining > 0, elapsed)
   }
 
   function reset() {
     keys.clear()
     pos.copy(points[startIndex])
     index = startIndex
-    heading = angleOf(tangents[index])
+    heading = travelHeading = angleOf(tangents[index])
+    charge = boostRemaining = driftDirection = 0
+    drifting = boostRequested = false
+    effects.reset()
     elapsed = progress = velocity = 0
     lapTime = null
     nextCrossing = finishLineIndex
@@ -111,13 +122,34 @@ export function createRace(container, renderHud) {
     const steer = Number(keys.has('ArrowLeft')) - Number(keys.has('ArrowRight'))
     if (throttle || brake) started = true
     if (started) elapsed += dt
-    if (throttle) velocity = Math.min(33, velocity + (20 - Math.max(0, velocity) * .34) * dt)
-    else if (brake) velocity = Math.max(-9, velocity - (velocity > 0 ? 30 : 10) * dt)
-    else velocity *= Math.exp(-1.52 * dt)
+    boostRemaining = Math.max(0, boostRemaining - dt)
+    if (boostRequested && charge >= 1 && velocity > 0 && !brake && boostRemaining === 0) {
+      boostRemaining = boostDuration
+      charge = 0
+      driftDirection = 0
+    }
+    boostRequested = false
+    if (brake) boostRemaining = 0
+    const boosting = boostRemaining > 0
+
+    if (!keys.has('Shift') || velocity < driftMinSpeed || brake || boosting) driftDirection = 0
+    else if (steer && !driftDirection) driftDirection = steer
+    drifting = driftDirection !== 0
+
+    if (brake) velocity = Math.max(-9, velocity - (velocity > 0 ? 30 : 10) * dt)
+    else if (boosting) velocity = Math.min(boostSpeed, velocity + 31 * dt)
+    else if (throttle && velocity <= topSpeed) velocity = Math.min(topSpeed, velocity + (20 - Math.max(0, velocity) * .34) * dt)
+    else if (throttle) velocity = Math.max(topSpeed, velocity - 15 * dt)
+    else velocity *= Math.exp((drifting ? -.9 : -1.52) * dt)
+    if (drifting) velocity *= Math.exp(-.24 * dt)
     if (Math.abs(velocity) < .045) velocity = 0
 
-    heading += steer * Math.sign(velocity) * Math.min(1, Math.abs(velocity) / 3) * (1.92 - Math.min(30, Math.abs(velocity)) * .029) * dt
-    direction.set(-Math.sin(heading), 0, -Math.cos(heading))
+    const turnRate = Math.sign(velocity) * Math.min(1, Math.abs(velocity) / 3) * (1.92 - Math.min(30, Math.abs(velocity)) * .029)
+    const steering = drifting ? driftDirection * .72 + steer * .69 : steer
+    heading += steering * turnRate * dt
+    const slipTarget = heading - driftDirection * .22
+    travelHeading = T.MathUtils.lerp(travelHeading, slipTarget, damp(drifting ? 3 : 13, dt))
+    direction.set(-Math.sin(travelHeading), 0, -Math.cos(travelHeading))
     pos.addScaledVector(direction, velocity * dt)
 
     const next = nearestPoint()
@@ -130,6 +162,8 @@ export function createRace(container, renderHud) {
       pos.x += tangent.z * push
       pos.z -= tangent.x * push
       velocity *= Math.exp(-4.6 * dt)
+    } else if (drifting) {
+      charge = Math.min(1, charge + Math.min(.94, velocity * .046) * dt)
     }
 
     const length = points.length
@@ -142,7 +176,8 @@ export function createRace(container, renderHud) {
         best = best ? Math.min(split, best) : split
         if (lap === totalLaps) {
           finished = true
-          velocity = 0
+          velocity = boostRemaining = 0
+          drifting = false
         } else lap++
       }
       lapTime = elapsed
@@ -163,7 +198,7 @@ export function createRace(container, renderHud) {
   }
 
   function animate(now) {
-    const dt = Math.min((now - lastFrame) / 1000, .05)
+    const dt = T.MathUtils.clamp((now - lastFrame) / 1000, 0, .05)
     lastFrame = now
     if (!active || document.hidden) return
     if (velocity || keys.size) renderUntil = now + 800
@@ -179,23 +214,34 @@ export function createRace(container, renderHud) {
   }
 
   function setKey(key, pressed) {
-    if (active && pressed) keys.add(key)
-    else keys.delete(key)
+    if (!active || !pressed) {
+      keys.delete(key)
+      return
+    }
+    if (key === 'Space' && !keys.has(key)) boostRequested = true
+    keys.add(key)
   }
 
   window.addEventListener('keydown', (event) => {
     if (!active || event.altKey || event.ctrlKey || event.metaKey || event.target.closest?.('input, textarea, [contenteditable]')) return
-    if (arrows.has(event.key)) {
+    const key = event.code === 'Space' ? 'Space' : event.key
+    if (drivingKeys.has(key)) {
+      if (key === 'Space' && event.target.closest?.('button, a')) return
       event.preventDefault()
-      setKey(event.key, true)
+      setKey(key, true)
     } else if (event.code === 'KeyR' && !event.repeat) reset()
   })
-  window.addEventListener('keyup', (event) => setKey(event.key, false))
-  window.addEventListener('blur', () => keys.clear())
-  document.addEventListener('visibilitychange', () => keys.clear())
+  function clearKeys() {
+    keys.clear()
+    boostRequested = false
+  }
+
+  window.addEventListener('keyup', (event) => setKey(event.code === 'Space' ? 'Space' : event.key, false))
+  window.addEventListener('blur', clearKeys)
+  document.addEventListener('visibilitychange', clearKeys)
   new ResizeObserver(resize).observe(container)
   reset()
   resize()
   renderer.setAnimationLoop(animate)
-  return { reset, setKey, setActive(value) { active = value; keys.clear() } }
+  return { reset, setKey, setActive(value) { active = value; clearKeys() } }
 }
